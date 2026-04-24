@@ -39,11 +39,13 @@ def _resolve_mavlink_const(*names: str) -> int | None:
     return None
 
 
-# MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN was renamed to MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW (same id=1000)
-# in newer MAVLink dialects. Try the new name first, fall back to the old.
-_CMD_GIMBAL_PITCHYAW = _resolve_mavlink_const(
-    "MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW",
+# MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN (the name BlueOS Cockpit / camera setup page uses)
+# was renamed to MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW in newer MAVLink dialects.
+# Both share the same numeric command id (1000) and param layout, so either symbol
+# produces an identical COMMAND_LONG on the wire.
+_CMD_GIMBAL_TILTPAN = _resolve_mavlink_const(
     "MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN",
+    "MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW",
 )
 
 # Vehicle MAV_TYPE values vary by dialect (e.g. MAV_TYPE_ROVER vs MAV_TYPE_GROUND_ROVER);
@@ -280,14 +282,16 @@ def _send_command_with_ack(
 
 
 def set_camera_tilt_pitch_deg(master: mavutil.mavlink_connection, pitch_deg: float, limits: tuple[float, float]) -> None:
-    if _CMD_GIMBAL_PITCHYAW is None:
+    if _CMD_GIMBAL_TILTPAN is None:
         raise RuntimeError(
-            "Neither MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW nor MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN exists in this MAVLink dialect"
+            "Neither MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN nor MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW exists in this MAVLink dialect"
         )
     lo, hi = limits
     pitch_deg = max(lo, min(hi, pitch_deg))
-    logger.info("MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW pitch_deg=%s (clamped to %s..%s)", pitch_deg, lo, hi)
-    _send_command_with_ack(master, _CMD_GIMBAL_PITCHYAW, (pitch_deg, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+    # Logged as TILTPAN to match BlueOS Cockpit / camera-setup nomenclature; on the wire this is
+    # COMMAND_LONG cmd=1000 with param1=pitch — identical to what Cockpit sends.
+    logger.info("MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN pitch_deg=%s (clamped to %s..%s)", pitch_deg, lo, hi)
+    _send_command_with_ack(master, _CMD_GIMBAL_TILTPAN, (pitch_deg, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
 
 
 def set_camera_tilt_pitch(settings: AppSettings, pitch_deg: float) -> None:
