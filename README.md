@@ -43,6 +43,16 @@ chmod +x scripts/export-image-tar.sh
 ./scripts/export-image-tar.sh dev
 ```
 
+## GitHub Actions (Docker Hub)
+
+The workflow file is kept as an example at [`ci/deploy-blueos-extension.example.yml`](ci/deploy-blueos-extension.example.yml) because some GitHub OAuth tokens cannot push to `.github/workflows/` without the **`workflow` scope**.
+
+1. Run `gh auth refresh -s workflow` (or use a token with `workflow`), then:
+2. `mkdir -p .github/workflows && cp ci/deploy-blueos-extension.example.yml .github/workflows/deploy.yml`
+3. Add repo **Secrets**: `DOCKER_USERNAME`, `DOCKER_PASSWORD` (and use **Variables** for author/org if desired, matching the action inputs).
+
+Then push to trigger the BlueOS extension deploy action.
+
 ## Docker image
 
 ```bash

@@ -1,3 +1,5 @@
+# Copy to .github/workflows/deploy.yml when your Git token has the `workflow` scope
+# (e.g. `gh auth refresh -s workflow`), then push.
 name: Deploy BlueOS Extension Image
 
 on:
