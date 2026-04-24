@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Single I/O lock serialises all sends/recvs on the shared mavlink connection
+# (pymavlink's mav.* are not thread-safe). It also protects connection creation.
 _lock = threading.Lock()
 _master: mavutil.mavlink_connection | None = None
 _master_conn_str: str | None = None
@@ -21,13 +23,62 @@ _master_conn_str: str | None = None
 # Commands are sent to the autopilot component; heartbeats from GCS/routers often use other components.
 _AP_COMP = mavutil.mavlink.MAV_COMP_ID_AUTOPILOT1
 
+# Source identity we present to the MAVLink network for our outgoing packets.
+_SRC_SYS = 255
+_SRC_COMP = mavutil.mavlink.MAV_COMP_ID_USER1
+
 # Manual light test: 0% -> 1100 us (off), 100% -> 1900 us (full)
 MANUAL_LIGHT_PWM_MIN = 1100
 MANUAL_LIGHT_PWM_MAX = 1900
 
+_hb_stop = threading.Event()
+_hb_thread: threading.Thread | None = None
+
+
+def _send_local_heartbeat(m: mavutil.mavlink_connection) -> None:
+    """Emit a GCS heartbeat. Required for udpout/tcp upstreams (mavlink-server / mavlink-router)
+    to register us as a client and start forwarding traffic to our endpoint."""
+    m.mav.heartbeat_send(
+        mavutil.mavlink.MAV_TYPE_GCS,
+        mavutil.mavlink.MAV_AUTOPILOT_INVALID,
+        0,
+        0,
+        0,
+    )
+
+
+def _heartbeat_loop(m: mavutil.mavlink_connection) -> None:
+    """Keep our registration alive with the upstream router by sending 1 Hz heartbeats."""
+    while not _hb_stop.wait(1.0):
+        try:
+            with _lock:
+                if _master is not m:
+                    return
+                _send_local_heartbeat(m)
+        except Exception as e:
+            logger.debug("heartbeat send: %s", e)
+            return
+
+
+def _stop_heartbeat_thread() -> None:
+    global _hb_thread
+    _hb_stop.set()
+    if _hb_thread is not None:
+        _hb_thread.join(timeout=2)
+    _hb_thread = None
+
+
+def _start_heartbeat_thread(m: mavutil.mavlink_connection) -> None:
+    global _hb_thread
+    _stop_heartbeat_thread()
+    _hb_stop.clear()
+    _hb_thread = threading.Thread(target=_heartbeat_loop, args=(m,), name="mavlink-hb", daemon=True)
+    _hb_thread.start()
+
 
 def disconnect() -> None:
     global _master, _master_conn_str
+    _stop_heartbeat_thread()
     with _lock:
         if _master is not None:
             try:
@@ -39,12 +90,25 @@ def disconnect() -> None:
 
 
 def _wait_vehicle_heartbeat(m: mavutil.mavlink_connection, timeout_s: float) -> None:
-    """Pick target system/component from a vehicle autopilot heartbeat (not GCS/router)."""
+    """Pick target system/component from a vehicle autopilot heartbeat (not GCS/router).
+
+    Sends our own heartbeat once per second while waiting so the upstream router
+    (mavlink-server / mavlink-router) registers us as a client and forwards traffic.
+    """
+    _send_local_heartbeat(m)
     deadline = time.monotonic() + timeout_s
+    next_hb = time.monotonic() + 1.0
     fallback_sys = None
     fallback_comp = None
     while time.monotonic() < deadline:
-        msg = m.recv_match(type="HEARTBEAT", blocking=True, timeout=1)
+        msg = m.recv_match(type="HEARTBEAT", blocking=True, timeout=0.5)
+        now = time.monotonic()
+        if now >= next_hb:
+            try:
+                _send_local_heartbeat(m)
+            except Exception as e:
+                logger.debug("heartbeat send during wait: %s", e)
+            next_hb = now + 1.0
         if msg is None:
             continue
         if msg.get_type() != "HEARTBEAT":
@@ -90,7 +154,10 @@ def _wait_vehicle_heartbeat(m: mavutil.mavlink_connection, timeout_s: float) -> 
 
 
 def get_master(connection_string: str, *, timeout_s: float = 10.0) -> mavutil.mavlink_connection:
-    """Return a connected mavlink connection (singleton per connection string)."""
+    """Return a connected mavlink connection (singleton per connection string).
+
+    Caller must hold no locks; this acquires the I/O lock for the duration of connect.
+    """
     global _master, _master_conn_str
     with _lock:
         if _master is not None and _master_conn_str == connection_string:
@@ -100,15 +167,22 @@ def get_master(connection_string: str, *, timeout_s: float = 10.0) -> mavutil.ma
                 _master.close()
             except Exception:
                 pass
+            _master = None
+            _master_conn_str = None
         logger.info("MAVLink connecting: %s", connection_string)
-        m = mavutil.mavlink_connection(connection_string)
+        m = mavutil.mavlink_connection(
+            connection_string,
+            source_system=_SRC_SYS,
+            source_component=_SRC_COMP,
+        )
         _wait_vehicle_heartbeat(m, timeout_s=timeout_s)
         _master = m
         _master_conn_str = connection_string
-        return m
+    _start_heartbeat_thread(_master)
+    return _master
 
 
-def _command_long_send(
+def _command_long_send_locked(
     master: mavutil.mavlink_connection,
     command: int,
     p1: float,
@@ -119,7 +193,7 @@ def _command_long_send(
     p6: float,
     p7: float,
 ) -> None:
-    """Send COMMAND_LONG to the autopilot component (not the heartbeat source if that was a GCS)."""
+    """Send COMMAND_LONG to the autopilot component. Caller MUST hold _lock."""
     master.mav.command_long_send(
         master.target_system,
         _AP_COMP,
@@ -135,13 +209,13 @@ def _command_long_send(
     )
 
 
-def _expect_command_ack(
+def _expect_command_ack_locked(
     master: mavutil.mavlink_connection,
     expect_command: int,
     *,
     timeout_s: float = 3.0,
 ) -> None:
-    """Wait for COMMAND_ACK for expect_command; raise if rejected or timeout."""
+    """Wait for COMMAND_ACK for expect_command. Caller MUST hold _lock."""
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         ack = master.recv_match(type="COMMAND_ACK", blocking=True, timeout=0.5)
@@ -160,13 +234,25 @@ def _expect_command_ack(
     logger.warning("COMMAND_ACK timeout for command=%s (command may still have executed)", expect_command)
 
 
+def _send_command_with_ack(
+    master: mavutil.mavlink_connection,
+    command: int,
+    params: tuple[float, float, float, float, float, float, float],
+    *,
+    ack_timeout_s: float = 3.0,
+) -> None:
+    """Send a COMMAND_LONG and wait for COMMAND_ACK, holding the I/O lock for both."""
+    with _lock:
+        _command_long_send_locked(master, command, *params)
+        _expect_command_ack_locked(master, command, timeout_s=ack_timeout_s)
+
+
 def set_camera_tilt_pitch_deg(master: mavutil.mavlink_connection, pitch_deg: float, limits: tuple[float, float]) -> None:
     lo, hi = limits
     pitch_deg = max(lo, min(hi, pitch_deg))
     cmd = mavutil.mavlink.MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN
-    _command_long_send(master, cmd, pitch_deg, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
     logger.info("MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN pitch_deg=%s (clamped to %s..%s)", pitch_deg, lo, hi)
-    _expect_command_ack(master, cmd, timeout_s=3.0)
+    _send_command_with_ack(master, cmd, (pitch_deg, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
 
 
 def set_camera_tilt_pitch(settings: AppSettings, pitch_deg: float) -> None:
@@ -201,19 +287,12 @@ def _do_set_servo_us(master: mavutil.mavlink_connection, servo_instance: int, pw
     """MAV_CMD_DO_SET_SERVO: param1 = servo output instance, param2 = PWM microseconds."""
     pwm_us = int(max(800, min(2200, pwm_us)))
     cmd = mavutil.mavlink.MAV_CMD_DO_SET_SERVO
-    _command_long_send(
+    logger.info("MAV_CMD_DO_SET_SERVO instance=%s pwm_us=%s", servo_instance, pwm_us)
+    _send_command_with_ack(
         master,
         cmd,
-        float(servo_instance),
-        float(pwm_us),
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
+        (float(servo_instance), float(pwm_us), 0.0, 0.0, 0.0, 0.0, 0.0),
     )
-    logger.info("MAV_CMD_DO_SET_SERVO instance=%s pwm_us=%s", servo_instance, pwm_us)
-    _expect_command_ack(master, cmd, timeout_s=3.0)
 
 
 def mavlink_status(settings: AppSettings) -> dict:
