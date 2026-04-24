@@ -4,7 +4,7 @@ services:
     image: vshie/blueos-timelapse-controller:dev
     container_name: blueos-timelapse-controller
     ports:
-      - "8080:8080"
+      - "9876:9876"
     volumes:
       - ./data:/data
     environment:

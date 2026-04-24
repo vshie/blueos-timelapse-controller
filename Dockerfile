@@ -50,13 +50,13 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY backend/app ./app
 COPY --from=frontend /src/dist ./app/static
 
-EXPOSE 8080/tcp
+EXPOSE 9876/tcp
 
 LABEL version="0.1.0"
 LABEL permissions='\
 {\
  "ExposedPorts": {\
-   "8080/tcp": {}\
+   "9876/tcp": {}\
  },\
  "HostConfig": {\
    "Binds": [\
@@ -64,13 +64,12 @@ LABEL permissions='\
    ],\
    "ExtraHosts": ["host.docker.internal:host-gateway"],\
    "PortBindings": {\
-     "8080/tcp": [\
+     "9876/tcp": [\
        {\
          "HostPort": ""\
        }\
      ]\
-   },\
-   "NetworkMode": "host"\
+   }\
  }\
 }'
 LABEL authors='[\

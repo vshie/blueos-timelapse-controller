@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     data_dir: str = "/data"
     static_dir: str | None = None  # if None, resolved relative to package
     host: str = "0.0.0.0"
-    port: int = 8080
+    port: int = 9876
 
 
 @lru_cache

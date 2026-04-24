@@ -30,7 +30,7 @@ rm -rf ../backend/app/static && mkdir -p ../backend/app/static && cp -r dist/* .
 cd ../backend && python3 -m venv .venv && . .venv/bin/activate && pip install -e ".[dev]"
 export TIMELAPSE_DATA_DIR="$(pwd)/../data"
 mkdir -p "$TIMELAPSE_DATA_DIR"
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
+uvicorn app.main:app --reload --host 0.0.0.0 --port 9876
 ```
 
 - **Snapshots** use **ffmpeg** (reliable single-frame RTSP). **GStreamer** is used for **RTSP probe** and **MPEG-TS recording** (H.264 passthrough).
@@ -67,9 +67,14 @@ docker save vshie/blueos-timelapse-controller:dev -o dist/timelapse-controller-d
 2. Extensions Manager → custom extension → image `vshie/blueos-timelapse-controller:<tag>`.
 3. Paste **Custom settings** from the Dockerfile `permissions` `HostConfig` (JSON), or install from store once published.
 
+## Networking
+
+- The extension uses **bridge networking** (BlueOS auto-maps an external port to the container’s **`9876/tcp`**). Host networking is **not** used because the BlueOS host already runs `mavlink-server` on `0.0.0.0:8080` and other services on common ports.
+- Reach the host from the container via **`host.docker.internal`** (granted by the `ExtraHosts: host.docker.internal:host-gateway` permission).
+
 ## MAVLink defaults
 
-- The extension Docker image requests **`NetworkMode: host`** so it shares the companion’s UDP stack; **`udpin:0.0.0.0:14550`** then receives the same MAVLink as BlueOS. If you disabled host networking, set **MAVLink connection** in Settings to a reachable endpoint (e.g. vehicle UDP port forwarded into the container).
+- **Connection:** `udpout:host.docker.internal:14550` — registers the extension as a UDP client of BlueOS `mavlink-server` on host port 14550. Change in **Settings** if your routing differs (e.g. `tcp:host.docker.internal:8080` for `mavlink-server` TCP).
 - **Tilt:** `MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN` with pitch in degrees (**0° = center**). Default range in Settings is **−70°…+70°** (see [camera_tilt_control.md](camera_tilt_control.md)).
 - **Light (manual tab):** `MAV_CMD_DO_SET_SERVO` on the configured channel (default **13**): **0% → 1100 µs (off)**, **100% → 1900 µs (full)**. Recipes still use **Settings → light PWM min/max** for brightness %.
 - Commands are sent to **`MAV_COMP_ID_AUTOPILOT1`**, not the heartbeat source component (avoids GCS/router-only heartbeats).

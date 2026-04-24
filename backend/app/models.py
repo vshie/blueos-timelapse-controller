@@ -12,8 +12,11 @@ class AppSettings(BaseModel):
 
     default_rtsp_url: str = Field(default="", description="Default RTSP URL for capture")
     mavlink_connection: str = Field(
-        default="udpin:0.0.0.0:14550",
-        description="pymavlink connection string, e.g. udpin:0.0.0.0:14550 or udp:127.0.0.1:14550",
+        default="udpout:host.docker.internal:14550",
+        description=(
+            "pymavlink connection string. With BlueOS bridge networking the container reaches the host "
+            "via host.docker.internal; udpout: registers as a client with mavlink-server on UDP 14550."
+        ),
     )
     light_servo_channel: int = Field(default=13, ge=1, le=32)
     light_pwm_min: int = Field(default=1100, ge=800, le=2200)
