@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import axios from "axios";
 import { computed, onMounted, reactive, ref } from "vue";
 import * as api from "./api";
 import type { Recipe, Settings } from "./api";
@@ -51,14 +52,33 @@ function setMsg(text: string, err = false) {
   msg.err = err;
 }
 
+function formatErr(e: unknown): string {
+  if (axios.isAxiosError(e)) {
+    const url = e.config?.url ?? "";
+    const base = e.config?.baseURL ?? "";
+    const st = e.response?.status;
+    return `HTTP ${st} ${base}${url}: ${e.message}`;
+  }
+  return String(e);
+}
+
 async function refresh() {
-  try {
-    status.value = await api.getStatus();
-    recipes.value = await api.listRecipes();
-    settings.value = await api.getSettings();
+  const labels = ["status", "recipes", "settings"] as const;
+  const settled = await Promise.allSettled([api.getStatus(), api.listRecipes(), api.getSettings()]);
+  const failed: string[] = [];
+  settled.forEach((r, i) => {
+    if (r.status === "fulfilled") {
+      if (i === 0) status.value = r.value;
+      if (i === 1) recipes.value = r.value;
+      if (i === 2) settings.value = r.value;
+    } else {
+      failed.push(`${labels[i]}: ${formatErr(r.reason)}`);
+    }
+  });
+  if (failed.length) {
+    setMsg(failed.join("\n"), true);
+  } else {
     setMsg("");
-  } catch (e: unknown) {
-    setMsg(String(e), true);
   }
 }
 

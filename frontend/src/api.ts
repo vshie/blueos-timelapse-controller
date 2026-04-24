@@ -1,6 +1,28 @@
 import axios from "axios";
 
-const client = axios.create({ baseURL: "" });
+/**
+ * BlueOS may serve this app under a subpath (e.g. /extensionv2/timelapsecontroller/).
+ * Axios URLs that start with "/" hit the site root, not the extension — use a resolved
+ * base URL and paths without a leading slash.
+ */
+function apiBaseURL(): string {
+  const raw = (import.meta.env.BASE_URL || "/") as string;
+  if (typeof window === "undefined") {
+    return raw.endsWith("/") ? raw : `${raw}/`;
+  }
+  try {
+    const resolved = new URL(raw, window.location.href);
+    let href = resolved.href;
+    if (!href.endsWith("/")) {
+      href += "/";
+    }
+    return href;
+  } catch {
+    return "/";
+  }
+}
+
+const client = axios.create({ baseURL: apiBaseURL() });
 
 export type SchedulerState = {
   state: string;
@@ -42,7 +64,7 @@ export type Recipe = {
 };
 
 export async function getStatus() {
-  const { data } = await client.get("/api/v1/status");
+  const { data } = await client.get("api/v1/status");
   return data as {
     scheduler: SchedulerState;
     mavlink: Record<string, unknown>;
@@ -51,50 +73,50 @@ export async function getStatus() {
 }
 
 export async function getSettings() {
-  const { data } = await client.get<Settings>("/api/v1/settings");
+  const { data } = await client.get<Settings>("api/v1/settings");
   return data;
 }
 
 export async function saveSettings(s: Settings) {
-  const { data } = await client.put<Settings>("/api/v1/settings", s);
+  const { data } = await client.put<Settings>("api/v1/settings", s);
   return data;
 }
 
 export async function listRecipes() {
-  const { data } = await client.get<Recipe[]>("/api/v1/recipes");
+  const { data } = await client.get<Recipe[]>("api/v1/recipes");
   return data;
 }
 
 export async function saveRecipe(r: Recipe) {
   if (r.id) {
-    const { data } = await client.put<Recipe>(`/api/v1/recipes/${r.id}`, r);
+    const { data } = await client.put<Recipe>(`api/v1/recipes/${encodeURIComponent(r.id)}`, r);
     return data;
   }
-  const { data } = await client.post<Recipe>("/api/v1/recipes", r);
+  const { data } = await client.post<Recipe>("api/v1/recipes", r);
   return data;
 }
 
 export async function deleteRecipe(id: string) {
-  await client.delete(`/api/v1/recipes/${id}`);
+  await client.delete(`api/v1/recipes/${encodeURIComponent(id)}`);
 }
 
 export async function probeRtsp(url: string) {
-  const { data } = await client.post("/api/v1/probe-rtsp", { url });
+  const { data } = await client.post("api/v1/probe-rtsp", { url });
   return data;
 }
 
 export async function manualTiltCenter() {
-  return client.post("/api/v1/manual/tilt-center");
+  return client.post("api/v1/manual/tilt-center");
 }
 
 export async function manualLight(brightness_pct: number) {
-  return client.post("/api/v1/manual/light", { brightness_pct });
+  return client.post("api/v1/manual/light", { brightness_pct });
 }
 
 export async function manualSnapshot() {
-  return client.post("/api/v1/manual/snapshot");
+  return client.post("api/v1/manual/snapshot");
 }
 
 export async function manualRecord(seconds: number) {
-  return client.post("/api/v1/manual/record", { seconds });
+  return client.post("api/v1/manual/record", { seconds });
 }
