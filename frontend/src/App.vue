@@ -1,0 +1,365 @@
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from "vue";
+import * as api from "./api";
+import type { Recipe, Settings } from "./api";
+
+const tab = ref<"status" | "recipes" | "settings" | "manual">("status");
+const status = ref<Awaited<ReturnType<typeof api.getStatus>> | null>(null);
+const settings = ref<Settings | null>(null);
+const recipes = ref<Recipe[]>([]);
+const msg = reactive({ text: "", err: false });
+const busy = ref(false);
+
+const weekdays = [
+  { v: 0, l: "Mon" },
+  { v: 1, l: "Tue" },
+  { v: 2, l: "Wed" },
+  { v: 3, l: "Thu" },
+  { v: 4, l: "Fri" },
+  { v: 5, l: "Sat" },
+  { v: 6, l: "Sun" },
+];
+
+const editor = ref<Recipe>({
+  id: "",
+  name: "New recipe",
+  enabled: true,
+  days_of_week: [0, 1, 2, 3, 4, 5, 6],
+  times_local: ["12:00"],
+  rtsp_url: null,
+  filename_prefix: "",
+  actions: {
+    center_camera_tilt: true,
+    light_brightness_pct: null,
+    take_snapshot: true,
+    record_video_minutes: null,
+  },
+});
+
+const timesText = computed({
+  get: () => editor.value.times_local.join("\n"),
+  set: (s: string) => {
+    editor.value.times_local = s
+      .split(/[\n,]+/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+  },
+});
+
+function setMsg(text: string, err = false) {
+  msg.text = text;
+  msg.err = err;
+}
+
+async function refresh() {
+  try {
+    status.value = await api.getStatus();
+    recipes.value = await api.listRecipes();
+    settings.value = await api.getSettings();
+    setMsg("");
+  } catch (e: unknown) {
+    setMsg(String(e), true);
+  }
+}
+
+onMounted(() => {
+  void refresh();
+  setInterval(() => void refresh(), 5000);
+});
+
+async function saveSettingsForm() {
+  if (!settings.value) return;
+  busy.value = true;
+  try {
+    settings.value = await api.saveSettings(settings.value);
+    setMsg("Settings saved.");
+  } catch (e: unknown) {
+    setMsg(String(e), true);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function probe() {
+  if (!settings.value) return;
+  busy.value = true;
+  try {
+    const r = await api.probeRtsp(settings.value.default_rtsp_url);
+    setMsg(JSON.stringify(r, null, 2), !r.ok);
+  } catch (e: unknown) {
+    setMsg(String(e), true);
+  } finally {
+    busy.value = false;
+  }
+}
+
+function newRecipe() {
+  editor.value = {
+    id: "",
+    name: "New recipe",
+    enabled: true,
+    days_of_week: [0, 1, 2, 3, 4, 5, 6],
+    times_local: ["08:00"],
+    rtsp_url: null,
+    filename_prefix: "",
+    actions: {
+      center_camera_tilt: true,
+      light_brightness_pct: 50,
+      take_snapshot: true,
+      record_video_minutes: 1,
+    },
+  };
+}
+
+function editRecipe(r: Recipe) {
+  editor.value = JSON.parse(JSON.stringify(r)) as Recipe;
+}
+
+async function saveRecipe() {
+  busy.value = true;
+  try {
+    const saved = await api.saveRecipe(editor.value);
+    editor.value = saved;
+    await refresh();
+    setMsg("Recipe saved.");
+  } catch (e: unknown) {
+    setMsg(String(e), true);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function removeRecipe() {
+  if (!editor.value.id) return;
+  if (!confirm("Delete this recipe?")) return;
+  busy.value = true;
+  try {
+    await api.deleteRecipe(editor.value.id);
+    newRecipe();
+    await refresh();
+    setMsg("Recipe deleted.");
+  } catch (e: unknown) {
+    setMsg(String(e), true);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function runManual(fn: () => Promise<{ data: unknown }>, label: string) {
+  busy.value = true;
+  try {
+    const r = await fn();
+    setMsg(`${label}: ${JSON.stringify(r.data ?? r)}`);
+  } catch (e: unknown) {
+    setMsg(String(e), true);
+  } finally {
+    busy.value = false;
+  }
+}
+
+const lightTest = ref(50);
+const recordSec = ref(15);
+</script>
+
+<template>
+  <div class="container">
+    <h1>Timelapse Controller</h1>
+    <p class="small">BlueOS extension — scheduled RTSP capture, MAVLink tilt center, Lumen PWM.</p>
+
+    <div class="tabs">
+      <button :class="{ active: tab === 'status' }" type="button" @click="tab = 'status'">Status</button>
+      <button :class="{ active: tab === 'recipes' }" type="button" @click="tab = 'recipes'">Recipes</button>
+      <button :class="{ active: tab === 'settings' }" type="button" @click="tab = 'settings'">Settings</button>
+      <button :class="{ active: tab === 'manual' }" type="button" @click="tab = 'manual'">Manual</button>
+      <button class="secondary" type="button" :disabled="busy" @click="refresh()">Refresh</button>
+    </div>
+
+    <div v-if="msg.text" class="msg" :class="{ err: msg.err, ok: !msg.err }">{{ msg.text }}</div>
+
+    <div v-if="tab === 'status'" class="card">
+      <h2>Scheduler</h2>
+      <pre v-if="status" class="small" style="margin: 0; overflow: auto">{{ JSON.stringify(status.scheduler, null, 2) }}</pre>
+      <h2>MAVLink</h2>
+      <pre v-if="status" class="small" style="margin: 0; overflow: auto">{{ JSON.stringify(status.mavlink, null, 2) }}</pre>
+    </div>
+
+    <div v-if="tab === 'settings'" class="card">
+      <template v-if="settings">
+        <label>Default RTSP URL</label>
+        <input v-model="settings.default_rtsp_url" type="text" placeholder="rtsp://..." />
+
+        <label>MAVLink connection</label>
+        <input v-model="settings.mavlink_connection" type="text" />
+
+        <div class="row">
+          <div>
+            <label>Light servo channel</label>
+            <input v-model.number="settings.light_servo_channel" type="number" min="1" max="32" />
+          </div>
+          <div>
+            <label>Light PWM min</label>
+            <input v-model.number="settings.light_pwm_min" type="number" />
+          </div>
+          <div>
+            <label>Light PWM max</label>
+            <input v-model.number="settings.light_pwm_max" type="number" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>Tilt pitch min (deg)</label>
+            <input v-model.number="settings.tilt_pitch_min_deg" type="number" />
+          </div>
+          <div>
+            <label>Tilt pitch max (deg)</label>
+            <input v-model.number="settings.tilt_pitch_max_deg" type="number" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>GStreamer rtspsrc latency (ms)</label>
+            <input v-model.number="settings.gstreamer_latency_ms" type="number" />
+          </div>
+          <label class="row" style="align-items: center; margin-top: 1.4rem">
+            <input v-model="settings.use_tcp_rtsp" type="checkbox" style="width: auto" />
+            RTSP over TCP
+          </label>
+        </div>
+
+        <div class="row" style="margin-top: 0.75rem">
+          <button class="btn" type="button" :disabled="busy" @click="saveSettingsForm">Save settings</button>
+          <button class="btn secondary" type="button" :disabled="busy" @click="probe">Probe RTSP</button>
+        </div>
+      </template>
+    </div>
+
+    <div v-if="tab === 'recipes'" class="card">
+      <div class="row" style="margin-bottom: 0.75rem">
+        <button class="btn secondary" type="button" @click="newRecipe">New recipe</button>
+      </div>
+      <table v-if="recipes.length">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Enabled</th>
+            <th>Times</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="r in recipes" :key="r.id">
+            <td>{{ r.name }}</td>
+            <td>{{ r.enabled }}</td>
+            <td>{{ r.times_local.join(", ") }}</td>
+            <td><button class="btn secondary" type="button" @click="editRecipe(r)">Edit</button></td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-else class="small">No recipes yet.</p>
+
+      <h2>Editor</h2>
+      <label>Name</label>
+      <input v-model="editor.name" type="text" />
+      <label class="row" style="margin-top: 0.5rem">
+        <input v-model="editor.enabled" type="checkbox" style="width: auto" />
+        Enabled
+      </label>
+
+      <label>Days (local)</label>
+      <div class="row">
+        <label v-for="d in weekdays" :key="d.v" class="row" style="margin: 0">
+          <input v-model="editor.days_of_week" type="checkbox" style="width: auto" :value="d.v" />
+          {{ d.l }}
+        </label>
+      </div>
+
+      <label>Times (one HH:MM per line)</label>
+      <textarea v-model="timesText" />
+
+      <label>RTSP override (optional)</label>
+      <input
+        :value="editor.rtsp_url ?? ''"
+        type="text"
+        placeholder="leave empty to use default from settings"
+        @input="editor.rtsp_url = ($event.target as HTMLInputElement).value.trim() || null"
+      />
+
+      <label>Filename prefix</label>
+      <input v-model="editor.filename_prefix" type="text" />
+
+      <h2>Actions</h2>
+      <label class="row">
+        <input v-model="editor.actions.center_camera_tilt" type="checkbox" style="width: auto" />
+        Center camera tilt (MAVLink)
+      </label>
+      <label class="row">
+        <input v-model="editor.actions.take_snapshot" type="checkbox" style="width: auto" />
+        Take snapshot (ffmpeg)
+      </label>
+      <label>Light brightness % (empty = unchanged)</label>
+      <input
+        :value="editor.actions.light_brightness_pct ?? ''"
+        type="number"
+        min="0"
+        max="100"
+        placeholder="unchanged"
+        @input="
+          (e) =>
+            (editor.actions.light_brightness_pct =
+              (e.target as HTMLInputElement).value === '' ? null : Number((e.target as HTMLInputElement).value))
+        "
+      />
+      <label>Record video (minutes, empty = off)</label>
+      <input
+        :value="editor.actions.record_video_minutes ?? ''"
+        type="number"
+        step="0.1"
+        min="0"
+        placeholder="off"
+        @input="
+          (e) =>
+            (editor.actions.record_video_minutes =
+              (e.target as HTMLInputElement).value === '' ? null : Number((e.target as HTMLInputElement).value))
+        "
+      />
+
+      <div class="row" style="margin-top: 0.75rem">
+        <button class="btn" type="button" :disabled="busy" @click="saveRecipe">Save recipe</button>
+        <button class="btn secondary" type="button" :disabled="busy || !editor.id" @click="removeRecipe">Delete</button>
+      </div>
+    </div>
+
+    <div v-if="tab === 'manual'" class="card">
+      <p class="small">Uses current Settings (RTSP, MAVLink, servo channel).</p>
+      <div class="row">
+        <button class="btn" type="button" :disabled="busy" @click="runManual(() => api.manualTiltCenter(), 'tilt')">
+          Center tilt
+        </button>
+      </div>
+      <div class="row">
+        <input v-model.number="lightTest" type="number" min="0" max="100" style="max-width: 6rem" />
+        <button class="btn" type="button" :disabled="busy" @click="runManual(() => api.manualLight(lightTest), 'light')">
+          Set light %
+        </button>
+      </div>
+      <div class="row">
+        <button class="btn" type="button" :disabled="busy" @click="runManual(() => api.manualSnapshot(), 'snapshot')">
+          Snapshot
+        </button>
+      </div>
+      <div class="row">
+        <input v-model.number="recordSec" type="number" min="1" max="600" style="max-width: 6rem" />
+        <button
+          class="btn"
+          type="button"
+          :disabled="busy"
+          @click="runManual(() => api.manualRecord(recordSec), 'record')"
+        >
+          Record (seconds)
+        </button>
+      </div>
+    </div>
+  </div>
+</template>

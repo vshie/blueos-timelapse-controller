@@ -1,0 +1,155 @@
+:root {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
+  line-height: 1.45;
+  color: #e8eaed;
+  background: #121418;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0 0 2rem;
+}
+
+a {
+  color: #8ab4f8;
+}
+
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+h1 {
+  font-size: 1.35rem;
+  margin: 0 0 0.5rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 1rem 0;
+}
+
+.tabs button {
+  background: #1e222a;
+  border: 1px solid #333842;
+  color: #e8eaed;
+  padding: 0.45rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.tabs button.active {
+  background: #2a3344;
+  border-color: #5f8dee;
+}
+
+.card {
+  background: #1a1d24;
+  border: 1px solid #2c313c;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+label {
+  display: block;
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0.2rem;
+  color: #bdc1c6;
+}
+
+input[type="text"],
+input[type="number"],
+textarea,
+select {
+  width: 100%;
+  max-width: 42rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #333842;
+  background: #121418;
+  color: #e8eaed;
+}
+
+textarea {
+  min-height: 4rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin: 0.35rem 0;
+}
+
+.btn {
+  background: #2f5fb8;
+  color: #fff;
+  border: none;
+  padding: 0.45rem 0.85rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btn.secondary {
+  background: #3a3f4a;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.msg {
+  font-size: 0.85rem;
+  margin: 0.35rem 0;
+  white-space: pre-wrap;
+}
+
+.msg.err {
+  color: #f28b82;
+}
+
+.msg.ok {
+  color: #81c995;
+}
+
+.small {
+  font-size: 0.8rem;
+  color: #9aa0a6;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+th,
+td {
+  border-bottom: 1px solid #2c313c;
+  padding: 0.35rem 0.25rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  color: #bdc1c6;
+  font-weight: 600;
+}
