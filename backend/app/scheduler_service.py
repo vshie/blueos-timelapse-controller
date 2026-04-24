@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
-import subprocess
 import threading
 import time
 from dataclasses import dataclass, field
@@ -144,24 +143,17 @@ class SchedulerService:
             if acts.record_video_minutes and acts.record_video_minutes > 0:
                 dur_s = float(acts.record_video_minutes) * 60.0
                 ts_path = cap_dir / f"{base}.ts"
-                proc = capture.record_video_ts(
+                mp4_path = cap_dir / f"{base}.mp4"
+                capture.record_for_duration(
                     url,
                     ts_path,
+                    duration_s=dur_s,
                     latency_ms=settings.gstreamer_latency_ms,
                     tcp=settings.use_tcp_rtsp,
                 )
-                t0 = time.monotonic()
-                while time.monotonic() - t0 < dur_s:
-                    if proc.poll() is not None:
-                        break
-                    time.sleep(0.5)
-                proc.terminate()
-                try:
-                    proc.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-                mp4 = cap_dir / f"{base}.mp4"
-                capture.remux_ts_to_mp4(ts_path, mp4)
+                ok, final_path = capture.finalise_recording(ts_path, mp4_path, duration_s=dur_s)
+                if not ok:
+                    logger.warning("remux failed, keeping .ts: %s", final_path)
 
             self._set_state(
                 state="complete",

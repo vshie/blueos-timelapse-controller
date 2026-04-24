@@ -4,11 +4,19 @@ from __future__ import annotations
 
 import logging
 import shutil
+import signal
 import subprocess
 import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+RECORD_STARTUP_BUFFER_S = 2.5
+"""Extra wall-clock seconds given to the pipeline to cover RTSP handshake + jitterbuffer
+priming before we send EOS. After remux we trim back to the caller-requested duration."""
+
+RECORD_EOS_GRACE_S = 15.0
+"""Seconds we wait for gst-launch to drain and exit after SIGINT-triggered EOS."""
 
 
 def _which(name: str) -> str | None:
@@ -105,7 +113,7 @@ def record_video_ts(
     latency_ms: int = 300,
     tcp: bool = True,
 ) -> subprocess.Popen:
-    """Start background recording to MPEG-TS. Caller must terminate/wait."""
+    """Start background recording to MPEG-TS. Caller must EOS via `stop_recording`."""
     gst_launch = _which("gst-launch-1.0")
     if not gst_launch:
         raise RuntimeError("gst-launch-1.0 not found")
@@ -130,21 +138,117 @@ def record_video_ts(
     return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
 
 
-def remux_ts_to_mp4(ts_path: Path, mp4_path: Path, *, timeout_s: float = 600.0) -> None:
+def stop_recording(proc: subprocess.Popen, *, grace_s: float = RECORD_EOS_GRACE_S) -> None:
+    """Signal gst-launch to emit EOS and drain. Uses SIGINT because `-e` only
+    catches SIGINT (not SIGTERM) to trigger a clean EOS+shutdown; this is what
+    keeps trailing frames instead of truncating the muxer."""
+    if proc.poll() is not None:
+        return
+    try:
+        proc.send_signal(signal.SIGINT)
+    except Exception:
+        logger.exception("SIGINT to gst-launch failed; falling back to terminate")
+        proc.terminate()
+    try:
+        proc.wait(timeout=grace_s)
+        return
+    except subprocess.TimeoutExpired:
+        logger.warning("gst-launch did not exit after %.1fs of EOS; terminating", grace_s)
+    try:
+        proc.terminate()
+        proc.wait(timeout=5)
+    except Exception:
+        proc.kill()
+
+
+def record_for_duration(
+    url: str,
+    out_ts: Path,
+    duration_s: float,
+    *,
+    latency_ms: int = 300,
+    tcp: bool = True,
+    startup_buffer_s: float = RECORD_STARTUP_BUFFER_S,
+) -> None:
+    """Record to `out_ts` for `duration_s + startup_buffer_s` wall-clock seconds,
+    then send a clean EOS so trailing frames are flushed. The caller is expected to
+    remux with `remux_ts_to_mp4(..., trim_to_s=duration_s)` to trim back to the
+    exact requested duration."""
+    proc = record_video_ts(url, out_ts, latency_ms=latency_ms, tcp=tcp)
+    try:
+        target = max(0.1, duration_s + max(0.0, startup_buffer_s))
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < target:
+            if proc.poll() is not None:
+                break
+            time.sleep(0.25)
+    finally:
+        stop_recording(proc)
+
+
+def remux_ts_to_mp4(
+    ts_path: Path,
+    mp4_path: Path,
+    *,
+    timeout_s: float = 600.0,
+    trim_to_s: float | None = None,
+) -> bool:
+    """Remux TS to MP4 (stream copy). If `trim_to_s` is set, clamp output length
+    with ffmpeg `-t`. Returns True on success (mp4 exists and ffmpeg rc==0)."""
     ffmpeg = _which("ffmpeg")
     if not ffmpeg:
         logger.warning("ffmpeg not found; skip remux")
-        return
-    cmd = [
+        return False
+    if not ts_path.exists() or ts_path.stat().st_size == 0:
+        logger.warning("ts missing/empty, skip remux: %s", ts_path)
+        return False
+    cmd: list[str] = [
         ffmpeg,
         "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
         "-i",
         str(ts_path),
         "-c",
         "copy",
-        str(mp4_path),
     ]
-    subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s, check=False)
+    if trim_to_s is not None and trim_to_s > 0:
+        cmd += ["-t", f"{trim_to_s:.3f}"]
+    cmd.append(str(mp4_path))
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s, check=False)
+    except subprocess.TimeoutExpired:
+        logger.exception("ffmpeg remux timed out after %.0fs", timeout_s)
+        return False
+    if p.returncode != 0 or not mp4_path.exists():
+        logger.warning(
+            "ffmpeg remux failed rc=%s: %s",
+            p.returncode,
+            (p.stderr or p.stdout or "")[-1000:],
+        )
+        return False
+    return True
+
+
+def finalise_recording(
+    ts_path: Path,
+    mp4_path: Path,
+    duration_s: float | None,
+    *,
+    timeout_s: float = 600.0,
+) -> tuple[bool, Path]:
+    """Remux `.ts` into `.mp4` trimmed to `duration_s`. On success delete the `.ts`
+    and return (True, mp4). On failure keep the `.ts` and return (False, ts).
+    This keeps the source data available when the remux step itself errors."""
+    ok = remux_ts_to_mp4(ts_path, mp4_path, timeout_s=timeout_s, trim_to_s=duration_s)
+    if ok:
+        try:
+            ts_path.unlink(missing_ok=True)
+        except Exception:
+            logger.exception("failed to remove transient ts: %s", ts_path)
+        return True, mp4_path
+    return False, ts_path
 
 
 def stamp_basename(prefix: str) -> str:

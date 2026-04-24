@@ -220,28 +220,25 @@ def manual_record(body: ManualRecordBody):
     from app import capture
 
     base = capture.stamp_basename("manual")
-    ts_path = get_storage().captures_dir / f"{base}.ts"
-    proc = capture.record_video_ts(
+    cap_dir = get_storage().captures_dir
+    ts_path = cap_dir / f"{base}.ts"
+    mp4_path = cap_dir / f"{base}.mp4"
+    capture.record_for_duration(
         settings.default_rtsp_url,
         ts_path,
+        duration_s=float(body.seconds),
         latency_ms=settings.gstreamer_latency_ms,
         tcp=settings.use_tcp_rtsp,
     )
-    import time as _t
-
-    t0 = _t.monotonic()
-    while _t.monotonic() - t0 < body.seconds:
-        if proc.poll() is not None:
-            break
-        _t.sleep(0.25)
-    proc.terminate()
-    try:
-        proc.wait(timeout=15)
-    except Exception:
-        proc.kill()
-    mp4 = get_storage().captures_dir / f"{base}.mp4"
-    capture.remux_ts_to_mp4(ts_path, mp4)
-    return {"ok": True, "ts": str(ts_path), "mp4": str(mp4) if mp4.exists() else None}
+    ok, final_path = capture.finalise_recording(ts_path, mp4_path, duration_s=float(body.seconds))
+    if not ok:
+        return {
+            "ok": False,
+            "ts": str(final_path),
+            "mp4": None,
+            "error": "remux failed; raw .ts preserved",
+        }
+    return {"ok": True, "mp4": str(final_path)}
 
 
 def _static_dir() -> Path:

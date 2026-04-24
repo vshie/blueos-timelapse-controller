@@ -180,6 +180,11 @@ async function runManual(fn: () => Promise<{ data: unknown }>, label: string) {
 const lightTest = ref(50);
 const tiltPitchDeg = ref(0);
 const recordSec = ref(15);
+
+const capturesIframeUrl = computed(() => {
+  if (typeof window === "undefined") return "";
+  return `${window.location.origin}/file-browser/files/extensions/timelapse-controller/captures/`;
+});
 </script>
 
 <template>
@@ -202,6 +207,16 @@ const recordSec = ref(15);
       <pre v-if="status" class="small" style="margin: 0; overflow: auto">{{ JSON.stringify(status.scheduler, null, 2) }}</pre>
       <h2>MAVLink</h2>
       <pre v-if="status" class="small" style="margin: 0; overflow: auto">{{ JSON.stringify(status.mavlink, null, 2) }}</pre>
+      <h2>Captures</h2>
+      <p class="small" style="margin: 0.25rem 0 0.5rem">
+        Files under <code>/usr/blueos/extensions/timelapse-controller/captures</code> via the BlueOS File Browser.
+      </p>
+      <iframe
+        :src="capturesIframeUrl"
+        title="BlueOS File Browser — captures"
+        style="width: 100%; height: 560px; border: 1px solid #ccc; border-radius: 4px; background: white"
+        loading="lazy"
+      />
     </div>
 
     <div v-if="tab === 'settings'" class="card">
