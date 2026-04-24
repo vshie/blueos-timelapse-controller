@@ -25,7 +25,8 @@ jobs:
           docker-username: ${{ secrets.DOCKER_USERNAME }}
           docker-password: ${{ secrets.DOCKER_PASSWORD }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          image-name: "blueos-timelapse-controller"
+          # image-prefix defaults to "blueos-" in Deploy-BlueOS-Extension — do not repeat "blueos" here
+          image-name: "timelapse-controller"
           build-platforms: "linux/arm/v7,linux/arm64/v8"
           author: ${{ vars.MY_NAME }}
           author-email: ${{ vars.MY_EMAIL }}

@@ -50,7 +50,9 @@ CI matches [BlueOS_videorecorder](https://github.com/vshie/BlueOS_videorecorder/
 **Secrets:** `DOCKER_USERNAME`, `DOCKER_PASSWORD`  
 **Variables (repository):** `MY_NAME`, `MY_EMAIL`, `ORG_NAME`, `ORG_EMAIL` (same pattern as the videorecorder repo)
 
-Published image name: `DOCKER_USERNAME` / `blueos-timelapse-controller` (multi-arch `linux/arm/v7`, `linux/arm64/v8`).
+Published image on Docker Hub: `YOUR_DOCKER_USER/blueos-timelapse-controller`. The deploy action sets `docker_image = username + (image-prefix default "blueos-") + image-name`; this repo uses **image-name** `timelapse-controller` so the name is not doubled (see [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)).
+
+Multi-arch in CI: `linux/arm/v7`, `linux/arm64/v8`.
 
 ## Docker image
 
