@@ -27,6 +27,29 @@ _AP_COMP = mavutil.mavlink.MAV_COMP_ID_AUTOPILOT1
 _SRC_SYS = 255
 _SRC_COMP = mavutil.mavlink.MAV_COMP_ID_USER1
 
+# Vehicle MAV_TYPE values vary by dialect (e.g. MAV_TYPE_ROVER vs MAV_TYPE_GROUND_ROVER);
+# resolve dynamically and skip unknowns so a single dialect missing one constant doesn't break us.
+_VEHICLE_MAV_TYPES = {
+    t
+    for t in (
+        getattr(mavutil.mavlink, name, None)
+        for name in (
+            "MAV_TYPE_SUBMARINE",
+            "MAV_TYPE_SURFACE_BOAT",
+            "MAV_TYPE_GROUND_ROVER",
+            "MAV_TYPE_ROVER",
+            "MAV_TYPE_QUADROTOR",
+            "MAV_TYPE_HEXAROTOR",
+            "MAV_TYPE_OCTOROTOR",
+            "MAV_TYPE_TRICOPTER",
+            "MAV_TYPE_COAXIAL",
+            "MAV_TYPE_HELICOPTER",
+            "MAV_TYPE_FIXED_WING",
+        )
+    )
+    if t is not None
+}
+
 # Manual light test: 0% -> 1100 us (off), 100% -> 1900 us (full)
 MANUAL_LIGHT_PWM_MIN = 1100
 MANUAL_LIGHT_PWM_MAX = 1900
@@ -120,17 +143,7 @@ def _wait_vehicle_heartbeat(m: mavutil.mavlink_connection, timeout_s: float) -> 
         if fallback_sys is None:
             fallback_sys, fallback_comp = sysid, compid
         # Prefer obvious vehicle types (ArduSub / surface / rover / copter)
-        if msg.type in (
-            mavutil.mavlink.MAV_TYPE_SUBMARINE,
-            mavutil.mavlink.MAV_TYPE_SURFACE_BOAT,
-            mavutil.mavlink.MAV_TYPE_ROVER,
-            mavutil.mavlink.MAV_TYPE_QUADROTOR,
-            mavutil.mavlink.MAV_TYPE_HEXAROTOR,
-            mavutil.mavlink.MAV_TYPE_OCTOROTOR,
-            mavutil.mavlink.MAV_TYPE_TRICOPTER,
-            mavutil.mavlink.MAV_TYPE_COAXIAL,
-            mavutil.mavlink.MAV_TYPE_HELICOPTER,
-        ):
+        if msg.type in _VEHICLE_MAV_TYPES:
             m.target_system = sysid
             m.target_component = compid
             logger.info(
