@@ -63,7 +63,15 @@ class RtspProbeBody(BaseModel):
 
 
 class ManualLightBody(BaseModel):
+    """0% = 1100 us (off), 100% = 1900 us (full) for the manual light test."""
+
     brightness_pct: int = Field(ge=0, le=100)
+
+
+class ManualTiltPitchBody(BaseModel):
+    """Tilt in degrees; 0 = center, clamped to settings tilt range (default -70..70)."""
+
+    pitch_deg: float = Field(ge=-90.0, le=90.0)
 
 
 class ManualRecordBody(BaseModel):
@@ -147,7 +155,21 @@ def manual_tilt_center():
 
     try:
         mavlink_control.center_camera_tilt(settings)
-        return {"ok": True}
+        return {"ok": True, "pitch_deg": 0.0}
+    except Exception as e:
+        raise HTTPException(500, str(e)) from e
+
+
+@app.post("/api/v1/manual/tilt")
+def manual_tilt(body: ManualTiltPitchBody):
+    settings = get_storage().load_settings()
+    from app import mavlink_control
+
+    lo, hi = settings.tilt_pitch_min_deg, settings.tilt_pitch_max_deg
+    pitch = max(lo, min(hi, body.pitch_deg))
+    try:
+        mavlink_control.set_camera_tilt_pitch(settings, pitch)
+        return {"ok": True, "pitch_deg": pitch}
     except Exception as e:
         raise HTTPException(500, str(e)) from e
 
@@ -158,8 +180,13 @@ def manual_light(body: ManualLightBody):
     from app import mavlink_control
 
     try:
-        mavlink_control.set_light_pwm(settings, body.brightness_pct)
-        return {"ok": True}
+        mavlink_control.set_light_manual_brightness(settings, body.brightness_pct)
+        pwm = mavlink_control.brightness_to_pwm(
+            body.brightness_pct,
+            mavlink_control.MANUAL_LIGHT_PWM_MIN,
+            mavlink_control.MANUAL_LIGHT_PWM_MAX,
+        )
+        return {"ok": True, "brightness_pct": body.brightness_pct, "pwm_us": pwm, "servo": settings.light_servo_channel}
     except Exception as e:
         raise HTTPException(500, str(e)) from e
 

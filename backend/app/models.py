@@ -18,8 +18,8 @@ class AppSettings(BaseModel):
     light_servo_channel: int = Field(default=13, ge=1, le=32)
     light_pwm_min: int = Field(default=1100, ge=800, le=2200)
     light_pwm_max: int = Field(default=1900, ge=800, le=2200)
-    tilt_pitch_min_deg: float = Field(default=-90.0)
-    tilt_pitch_max_deg: float = Field(default=90.0)
+    tilt_pitch_min_deg: float = Field(default=-70.0, description="Gimbal tilt min (deg), e.g. -70")
+    tilt_pitch_max_deg: float = Field(default=70.0, description="Gimbal tilt max (deg), e.g. 70; 0 = center")
     gstreamer_latency_ms: int = Field(default=300, ge=0, le=5000)
     use_tcp_rtsp: bool = Field(default=True, description="Use RTSP over TCP (rtspsrc protocols=tcp)")
 

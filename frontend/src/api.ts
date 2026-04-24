@@ -109,6 +109,10 @@ export async function manualTiltCenter() {
   return client.post("api/v1/manual/tilt-center");
 }
 
+export async function manualTiltPitch(pitchDeg: number) {
+  return client.post("api/v1/manual/tilt", { pitch_deg: pitchDeg });
+}
+
 export async function manualLight(brightness_pct: number) {
   return client.post("api/v1/manual/light", { brightness_pct });
 }

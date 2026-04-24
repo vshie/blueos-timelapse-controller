@@ -69,7 +69,8 @@ LABEL permissions='\
          "HostPort": ""\
        }\
      ]\
-   }\
+   },\
+   "NetworkMode": "host"\
  }\
 }'
 LABEL authors='[\

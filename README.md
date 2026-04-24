@@ -69,9 +69,10 @@ docker save vshie/blueos-timelapse-controller:dev -o dist/timelapse-controller-d
 
 ## MAVLink defaults
 
-- Connection: `udpin:0.0.0.0:14550` (companion listens; autopilot sends to companion).
-- Tilt center: `MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN` pitch `0°` (see [camera_tilt_control.md](camera_tilt_control.md)).
-- Light: `MAV_CMD_DO_SET_SERVO` on configured channel (default **13**), PWM mapped from brightness %.
+- The extension Docker image requests **`NetworkMode: host`** so it shares the companion’s UDP stack; **`udpin:0.0.0.0:14550`** then receives the same MAVLink as BlueOS. If you disabled host networking, set **MAVLink connection** in Settings to a reachable endpoint (e.g. vehicle UDP port forwarded into the container).
+- **Tilt:** `MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN` with pitch in degrees (**0° = center**). Default range in Settings is **−70°…+70°** (see [camera_tilt_control.md](camera_tilt_control.md)).
+- **Light (manual tab):** `MAV_CMD_DO_SET_SERVO` on the configured channel (default **13**): **0% → 1100 µs (off)**, **100% → 1900 µs (full)**. Recipes still use **Settings → light PWM min/max** for brightness %.
+- Commands are sent to **`MAV_COMP_ID_AUTOPILOT1`**, not the heartbeat source component (avoids GCS/router-only heartbeats).
 
 Adjust in **Settings** if your vehicle differs.
 

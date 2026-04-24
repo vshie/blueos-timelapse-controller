@@ -178,6 +178,7 @@ async function runManual(fn: () => Promise<{ data: unknown }>, label: string) {
 }
 
 const lightTest = ref(50);
+const tiltPitchDeg = ref(0);
 const recordSec = ref(15);
 </script>
 
@@ -352,16 +353,36 @@ const recordSec = ref(15);
     </div>
 
     <div v-if="tab === 'manual'" class="card">
-      <p class="small">Uses current Settings (RTSP, MAVLink, servo channel).</p>
+      <p class="small">
+        MAVLink uses Settings → connection string and light servo channel. Tilt uses
+        <code>MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN</code> (deg, 0 = center; range from Settings, default −70…+70). Light manual
+        uses <code>MAV_CMD_DO_SET_SERVO</code>: 0% = 1100 µs (off), 100% = 1900 µs (full).
+      </p>
+      <h2>Tilt</h2>
       <div class="row">
-        <button class="btn" type="button" :disabled="busy" @click="runManual(() => api.manualTiltCenter(), 'tilt')">
-          Center tilt
+        <button class="btn" type="button" :disabled="busy" @click="runManual(() => api.manualTiltCenter(), 'tilt-center')">
+          Center (0°)
         </button>
       </div>
+      <div class="row">
+        <label style="margin: 0; min-width: 7rem">Pitch (deg)</label>
+        <input v-model.number="tiltPitchDeg" type="number" min="-70" max="70" step="1" style="max-width: 6rem" />
+        <button class="btn" type="button" :disabled="busy" @click="runManual(() => api.manualTiltPitch(tiltPitchDeg), 'tilt')">
+          Set tilt
+        </button>
+      </div>
+      <h2>Light</h2>
+      <p class="small">Channel from Settings (default 13). Brightness 0–100 maps linearly 1100–1900 µs.</p>
       <div class="row">
         <input v-model.number="lightTest" type="number" min="0" max="100" style="max-width: 6rem" />
         <button class="btn" type="button" :disabled="busy" @click="runManual(() => api.manualLight(lightTest), 'light')">
           Set light %
+        </button>
+        <button class="btn secondary" type="button" :disabled="busy" @click="runManual(() => api.manualLight(0), 'light-off')">
+          Off (0%)
+        </button>
+        <button class="btn secondary" type="button" :disabled="busy" @click="runManual(() => api.manualLight(100), 'light-full')">
+          Full (100%)
         </button>
       </div>
       <div class="row">
