@@ -135,6 +135,26 @@ textarea {
   color: #9aa0a6;
 }
 
+.device-time {
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85rem;
+  background: #1a1d24;
+  color: #d6e3ff;
+  border: 1px solid #2c313c;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  margin: 0.15rem 0 0.5rem;
+}
+
+code {
+  background: #1a1d24;
+  border: 1px solid #2c313c;
+  padding: 0 0.25rem;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

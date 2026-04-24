@@ -63,11 +63,21 @@ export type Recipe = {
   actions: RecipeActions;
 };
 
+export type DeviceTime = {
+  iso: string;
+  hm: string;
+  date: string;
+  weekday: string;
+  weekday_index: number;
+  tz: string;
+};
+
 export async function getStatus() {
   const { data } = await client.get("api/v1/status");
   return data as {
     scheduler: SchedulerState;
     mavlink: Record<string, unknown>;
+    device_time?: DeviceTime;
     settings_summary: Record<string, unknown>;
   };
 }

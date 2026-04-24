@@ -203,12 +203,20 @@ const capturesIframeUrl = computed(() => {
   if (typeof window === "undefined") return "";
   return `${window.location.origin}/file-browser/files/extensions/timelapse-controller/captures/`;
 });
+
+const deviceTimeLabel = computed(() => {
+  const dt = status.value?.device_time;
+  if (!dt) return "Device time: …";
+  const tz = dt.tz ? ` ${dt.tz}` : "";
+  return `Device time: ${dt.weekday} ${dt.date} ${dt.hm}${tz}`;
+});
 </script>
 
 <template>
   <div class="container">
     <h1>Timelapse Controller</h1>
     <p class="small">BlueOS extension — scheduled RTSP capture, MAVLink tilt center, Lumen PWM.</p>
+    <div class="device-time" :title="status?.device_time?.iso ?? ''">{{ deviceTimeLabel }}</div>
 
     <div class="tabs">
       <button :class="{ active: tab === 'status' }" type="button" @click="tab = 'status'">Status</button>
@@ -329,7 +337,11 @@ const capturesIframeUrl = computed(() => {
         </label>
       </div>
 
-      <label>Times (one HH:MM per line)</label>
+      <label>Times (one HH:MM per line, 24-hour clock)</label>
+      <p class="small" style="margin: 0.1rem 0 0.25rem">
+        24-hour format — e.g. midnight = <code>00:00</code>, 1 PM = <code>13:00</code>, 8:30 PM = <code>20:30</code>. One time
+        per line or comma-separated. Times run in the device's local timezone shown at the top of the page.
+      </p>
       <textarea v-model="timesText" />
 
       <label>RTSP override (optional)</label>

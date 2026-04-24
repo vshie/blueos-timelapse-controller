@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -78,15 +79,27 @@ class ManualRecordBody(BaseModel):
     seconds: float = Field(default=30.0, gt=0, le=7200)
 
 
+_WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
 @app.get("/api/v1/status")
 def api_status():
     st = _scheduler.get_state() if _scheduler is not None else SchedulerStateResponse()
     settings = get_storage().load_settings()
     from app import mavlink_control
 
+    now_local = dt.datetime.now().astimezone()
     return {
         "scheduler": st.model_dump(),
         "mavlink": mavlink_control.mavlink_status(settings),
+        "device_time": {
+            "iso": now_local.isoformat(timespec="seconds"),
+            "hm": now_local.strftime("%H:%M"),
+            "date": now_local.strftime("%Y-%m-%d"),
+            "weekday": _WEEKDAY_LABELS[now_local.weekday()],
+            "weekday_index": now_local.weekday(),
+            "tz": now_local.strftime("%Z") or now_local.strftime("%z"),
+        },
         "settings_summary": {
             "default_rtsp_url_set": bool(settings.default_rtsp_url),
             "mavlink_connection": settings.mavlink_connection,
