@@ -45,13 +45,12 @@ chmod +x scripts/export-image-tar.sh
 
 ## GitHub Actions (Docker Hub)
 
-The workflow file is kept as an example at [`ci/deploy-blueos-extension.example.yml`](ci/deploy-blueos-extension.example.yml) because some GitHub OAuth tokens cannot push to `.github/workflows/` without the **`workflow` scope**.
+CI matches [BlueOS_videorecorder](https://github.com/vshie/BlueOS_videorecorder/blob/main/.github/workflows/deploy.yml): [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs on every **push** using [Deploy-BlueOS-Extension](https://github.com/BlueOS-community/Deploy-BlueOS-Extension).
 
-1. Run `gh auth refresh -s workflow` (or use a token with `workflow`), then:
-2. `mkdir -p .github/workflows && cp ci/deploy-blueos-extension.example.yml .github/workflows/deploy.yml`
-3. Add repo **Secrets**: `DOCKER_USERNAME`, `DOCKER_PASSWORD` (and use **Variables** for author/org if desired, matching the action inputs).
+**Secrets:** `DOCKER_USERNAME`, `DOCKER_PASSWORD`  
+**Variables (repository):** `MY_NAME`, `MY_EMAIL`, `ORG_NAME`, `ORG_EMAIL` (same pattern as the videorecorder repo)
 
-Then push to trigger the BlueOS extension deploy action.
+Published image name: `DOCKER_USERNAME` / `blueos-timelapse-controller` (multi-arch `linux/arm/v7`, `linux/arm64/v8`).
 
 ## Docker image
 

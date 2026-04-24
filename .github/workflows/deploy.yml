@@ -1,10 +1,14 @@
-# Copy to .github/workflows/deploy.yml when your Git token has the `workflow` scope
-# (e.g. `gh auth refresh -s workflow`), then push.
 name: Deploy BlueOS Extension Image
 
 on:
+  # Automatically run when a new commit is added to the repository
   push:
-  workflow_dispatch:
+  # Automatically run when someone makes a Pull Request to the repository
+  #pull_request:
+  # Run manually
+  #workflow_dispatch:
+  # NOTE: caches may be removed if not run weekly
+  # -> may be worth scheduling for every 6 days
 
 jobs:
   deploy-docker-image:
