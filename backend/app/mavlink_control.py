@@ -27,6 +27,25 @@ _AP_COMP = mavutil.mavlink.MAV_COMP_ID_AUTOPILOT1
 _SRC_SYS = 255
 _SRC_COMP = mavutil.mavlink.MAV_COMP_ID_USER1
 
+def _resolve_mavlink_const(*names: str) -> int | None:
+    """Return the first attribute on mavutil.mavlink that exists, else None.
+
+    Lets us tolerate dialect differences (e.g. PITCHYAW renamed from TILTPAN, ROVER vs GROUND_ROVER).
+    """
+    for n in names:
+        v = getattr(mavutil.mavlink, n, None)
+        if v is not None:
+            return v
+    return None
+
+
+# MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN was renamed to MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW (same id=1000)
+# in newer MAVLink dialects. Try the new name first, fall back to the old.
+_CMD_GIMBAL_PITCHYAW = _resolve_mavlink_const(
+    "MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW",
+    "MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN",
+)
+
 # Vehicle MAV_TYPE values vary by dialect (e.g. MAV_TYPE_ROVER vs MAV_TYPE_GROUND_ROVER);
 # resolve dynamically and skip unknowns so a single dialect missing one constant doesn't break us.
 _VEHICLE_MAV_TYPES = {
@@ -261,11 +280,14 @@ def _send_command_with_ack(
 
 
 def set_camera_tilt_pitch_deg(master: mavutil.mavlink_connection, pitch_deg: float, limits: tuple[float, float]) -> None:
+    if _CMD_GIMBAL_PITCHYAW is None:
+        raise RuntimeError(
+            "Neither MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW nor MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN exists in this MAVLink dialect"
+        )
     lo, hi = limits
     pitch_deg = max(lo, min(hi, pitch_deg))
-    cmd = mavutil.mavlink.MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN
-    logger.info("MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN pitch_deg=%s (clamped to %s..%s)", pitch_deg, lo, hi)
-    _send_command_with_ack(master, cmd, (pitch_deg, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+    logger.info("MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW pitch_deg=%s (clamped to %s..%s)", pitch_deg, lo, hi)
+    _send_command_with_ack(master, _CMD_GIMBAL_PITCHYAW, (pitch_deg, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
 
 
 def set_camera_tilt_pitch(settings: AppSettings, pitch_deg: float) -> None:
