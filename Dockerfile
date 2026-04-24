@@ -60,7 +60,9 @@ LABEL permissions='\
  },\
  "HostConfig": {\
    "Binds": [\
-     "/usr/blueos/extensions/timelapse-controller:/data"\
+     "/usr/blueos/extensions/timelapse-controller:/data",\
+     "/etc/localtime:/etc/localtime:ro",\
+     "/etc/timezone:/etc/timezone:ro"\
    ],\
    "ExtraHosts": ["host.docker.internal:host-gateway"],\
    "PortBindings": {\

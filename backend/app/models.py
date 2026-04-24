@@ -25,12 +25,31 @@ class AppSettings(BaseModel):
     tilt_pitch_max_deg: float = Field(default=70.0, description="Gimbal tilt max (deg), e.g. 70; 0 = center")
     gstreamer_latency_ms: int = Field(default=300, ge=0, le=5000)
     use_tcp_rtsp: bool = Field(default=True, description="Use RTSP over TCP (rtspsrc protocols=tcp)")
+    timezone: str = Field(
+        default="",
+        description="IANA timezone (e.g. 'Pacific/Honolulu'). Empty = use container/host local time.",
+    )
 
     @model_validator(mode="after")
     def pwm_range(self):
         if self.light_pwm_max < self.light_pwm_min:
             raise ValueError("light_pwm_max must be >= light_pwm_min")
         return self
+
+    @field_validator("timezone")
+    @classmethod
+    def valid_timezone(cls, v: str) -> str:
+        if not v:
+            return ""
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        try:
+            ZoneInfo(v)
+        except ZoneInfoNotFoundError as e:
+            raise ValueError(
+                f'unknown IANA timezone "{v}"; expected values like "Pacific/Honolulu" or "UTC"'
+            ) from e
+        return v
 
 
 class RecipeActions(BaseModel):

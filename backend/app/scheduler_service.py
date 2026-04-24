@@ -12,6 +12,7 @@ from typing import Any, Callable
 from app import capture, mavlink_control
 from app.models import AppSettings, Recipe, SchedulerStateResponse
 from app.storage import Storage
+from app.timeutil import now_local
 
 logger = logging.getLogger(__name__)
 
@@ -84,10 +85,10 @@ class SchedulerService:
             self._set_state(state="idle", message="No enabled recipes", next_wake_iso=None)
             return
 
-        now_local = dt.datetime.now().astimezone()
-        today_wd = now_local.weekday()
-        date_str = now_local.strftime("%Y-%m-%d")
-        hm = now_local.strftime("%H:%M")
+        now = now_local(settings)
+        today_wd = now.weekday()
+        date_str = now.strftime("%Y-%m-%d")
+        hm = now.strftime("%H:%M")
 
         for recipe in recipes:
             if today_wd not in recipe.days_of_week:

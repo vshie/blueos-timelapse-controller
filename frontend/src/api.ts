@@ -43,6 +43,7 @@ export type Settings = {
   tilt_pitch_max_deg: number;
   gstreamer_latency_ms: number;
   use_tcp_rtsp: boolean;
+  timezone: string;
 };
 
 export type RecipeActions = {
@@ -70,6 +71,7 @@ export type DeviceTime = {
   weekday: string;
   weekday_index: number;
   tz: string;
+  tz_name?: string;
 };
 
 export async function getStatus() {

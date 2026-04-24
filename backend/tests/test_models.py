@@ -1,10 +1,13 @@
 """Unit tests for models and helpers."""
 
+import datetime as dt
+
 import pytest
 from pydantic import ValidationError
 
 from app.models import AppSettings, Recipe
 from app.mavlink_control import brightness_to_pwm
+from app.timeutil import now_local
 
 
 def test_brightness_to_pwm():
@@ -37,3 +40,33 @@ def test_recipe_time_lenient_parsing():
 def test_recipe_multiple_times_dedup_sorted():
     r = Recipe(name="x", days_of_week=[0], times_local=["14:30", "08:00", "08:00"])
     assert r.times_local == ["08:00", "14:30"]
+
+
+def test_app_settings_timezone_empty_allowed():
+    s = AppSettings()
+    assert s.timezone == ""
+    s2 = AppSettings(timezone="")
+    assert s2.timezone == ""
+
+
+def test_app_settings_timezone_invalid_rejected():
+    with pytest.raises(ValidationError):
+        AppSettings(timezone="Not/AZone")
+
+
+def test_app_settings_timezone_pacific_honolulu_accepted():
+    s = AppSettings(timezone="Pacific/Honolulu")
+    assert s.timezone == "Pacific/Honolulu"
+
+
+def test_now_local_with_honolulu_returns_minus_ten_offset():
+    s = AppSettings(timezone="Pacific/Honolulu")
+    t = now_local(s)
+    assert t.tzinfo is not None
+    assert t.utcoffset() == dt.timedelta(hours=-10)
+
+
+def test_now_local_empty_timezone_returns_aware_datetime():
+    s = AppSettings()
+    t = now_local(s)
+    assert t.tzinfo is not None

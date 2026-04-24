@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime as dt
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -17,6 +16,7 @@ from app.config_env import get_settings
 from app.models import AppSettings, Recipe, SchedulerStateResponse
 from app.scheduler_service import SchedulerService
 from app.storage import Storage
+from app.timeutil import now_local
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -88,17 +88,19 @@ def api_status():
     settings = get_storage().load_settings()
     from app import mavlink_control
 
-    now_local = dt.datetime.now().astimezone()
+    now = now_local(settings)
+    tz_label = now.strftime("%Z") or settings.timezone or now.strftime("%z")
     return {
         "scheduler": st.model_dump(),
         "mavlink": mavlink_control.mavlink_status(settings),
         "device_time": {
-            "iso": now_local.isoformat(timespec="seconds"),
-            "hm": now_local.strftime("%H:%M"),
-            "date": now_local.strftime("%Y-%m-%d"),
-            "weekday": _WEEKDAY_LABELS[now_local.weekday()],
-            "weekday_index": now_local.weekday(),
-            "tz": now_local.strftime("%Z") or now_local.strftime("%z"),
+            "iso": now.isoformat(timespec="seconds"),
+            "hm": now.strftime("%H:%M"),
+            "date": now.strftime("%Y-%m-%d"),
+            "weekday": _WEEKDAY_LABELS[now.weekday()],
+            "weekday_index": now.weekday(),
+            "tz": tz_label,
+            "tz_name": settings.timezone or "",
         },
         "settings_summary": {
             "default_rtsp_url_set": bool(settings.default_rtsp_url),

@@ -207,9 +207,20 @@ const capturesIframeUrl = computed(() => {
 const deviceTimeLabel = computed(() => {
   const dt = status.value?.device_time;
   if (!dt) return "Device time: …";
-  const tz = dt.tz ? ` ${dt.tz}` : "";
-  return `Device time: ${dt.weekday} ${dt.date} ${dt.hm}${tz}`;
+  const tzShort = dt.tz ? ` ${dt.tz}` : "";
+  const tzName = dt.tz_name ? ` (${dt.tz_name})` : "";
+  return `Device time: ${dt.weekday} ${dt.date} ${dt.hm}${tzShort}${tzName}`;
 });
+
+function detectBrowserTimezone() {
+  if (!settings.value) return;
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz) settings.value.timezone = tz;
+  } catch {
+    // ignore unsupported environments
+  }
+}
 </script>
 
 <template>
@@ -289,6 +300,23 @@ const deviceTimeLabel = computed(() => {
             RTSP over TCP
           </label>
         </div>
+
+        <label>Timezone (IANA, e.g. <code>Pacific/Honolulu</code>)</label>
+        <div class="row">
+          <input
+            v-model="settings.timezone"
+            type="text"
+            placeholder="Pacific/Honolulu"
+            style="flex: 1"
+          />
+          <button class="btn secondary" type="button" @click="detectBrowserTimezone">
+            Detect from browser
+          </button>
+        </div>
+        <p class="small" style="margin: 0.25rem 0 0">
+          Empty = use the container's system time (which on BlueOS reflects the host clock if
+          <code>/etc/localtime</code> is bind-mounted).
+        </p>
 
         <div class="row" style="margin-top: 0.75rem">
           <button class="btn" type="button" :disabled="busy" @click="saveSettingsForm">Save settings</button>

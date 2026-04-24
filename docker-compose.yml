@@ -7,6 +7,8 @@ services:
       - "9876:9876"
     volumes:
       - ./data:/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     environment:
       - TIMELAPSE_DATA_DIR=/data
     extra_hosts:
