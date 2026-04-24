@@ -92,15 +92,20 @@ class Recipe(BaseModel):
     @field_validator("times_local")
     @classmethod
     def valid_times(cls, v: list[str]) -> list[str]:
+        """Accept lenient HH:MM 24h input (e.g. '8:00', '08:00', '08:00 ') and normalise to 'HH:MM'."""
         import re
 
         if not v:
             raise ValueError("at least one time required")
-        pat = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+        pat = re.compile(r"^\s*([01]?\d|2[0-3]):([0-5]?\d)\s*$")
+        out: set[str] = set()
         for t in v:
-            if not pat.match(t.strip()):
-                raise ValueError(f'invalid time "{t}", expected HH:MM 24h')
-        return sorted({t.strip() for t in v})
+            m = pat.match(t)
+            if not m:
+                raise ValueError(f'invalid time "{t}", expected HH:MM 24h (e.g. 08:00 or 8:00)')
+            hh, mm = int(m.group(1)), int(m.group(2))
+            out.add(f"{hh:02d}:{mm:02d}")
+        return sorted(out)
 
 
 class SchedulerStateResponse(BaseModel):

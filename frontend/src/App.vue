@@ -57,7 +57,25 @@ function formatErr(e: unknown): string {
     const url = e.config?.url ?? "";
     const base = e.config?.baseURL ?? "";
     const st = e.response?.status;
-    return `HTTP ${st} ${base}${url}: ${e.message}`;
+    const data = e.response?.data as { detail?: unknown } | undefined;
+    let detailText = "";
+    if (data && data.detail !== undefined) {
+      if (Array.isArray(data.detail)) {
+        // FastAPI 422: [{loc:["body","times_local",0], msg:"...", type:"..."}]
+        detailText = data.detail
+          .map((d: { loc?: unknown[]; msg?: string }) => {
+            const loc = Array.isArray(d.loc) ? d.loc.filter((x) => x !== "body").join(".") : "";
+            return loc ? `${loc}: ${d.msg ?? ""}` : (d.msg ?? "");
+          })
+          .join("; ");
+      } else if (typeof data.detail === "string") {
+        detailText = data.detail;
+      } else {
+        detailText = JSON.stringify(data.detail);
+      }
+    }
+    const tail = detailText ? ` — ${detailText}` : `: ${e.message}`;
+    return `HTTP ${st} ${base}${url}${tail}`;
   }
   return String(e);
 }
@@ -94,7 +112,7 @@ async function saveSettingsForm() {
     settings.value = await api.saveSettings(settings.value);
     setMsg("Settings saved.");
   } catch (e: unknown) {
-    setMsg(String(e), true);
+    setMsg(formatErr(e), true);
   } finally {
     busy.value = false;
   }
@@ -107,7 +125,7 @@ async function probe() {
     const r = await api.probeRtsp(settings.value.default_rtsp_url);
     setMsg(JSON.stringify(r, null, 2), !r.ok);
   } catch (e: unknown) {
-    setMsg(String(e), true);
+    setMsg(formatErr(e), true);
   } finally {
     busy.value = false;
   }
@@ -143,7 +161,7 @@ async function saveRecipe() {
     await refresh();
     setMsg("Recipe saved.");
   } catch (e: unknown) {
-    setMsg(String(e), true);
+    setMsg(formatErr(e), true);
   } finally {
     busy.value = false;
   }
@@ -159,7 +177,7 @@ async function removeRecipe() {
     await refresh();
     setMsg("Recipe deleted.");
   } catch (e: unknown) {
-    setMsg(String(e), true);
+    setMsg(formatErr(e), true);
   } finally {
     busy.value = false;
   }
@@ -171,7 +189,7 @@ async function runManual(fn: () => Promise<{ data: unknown }>, label: string) {
     const r = await fn();
     setMsg(`${label}: ${JSON.stringify(r.data ?? r)}`);
   } catch (e: unknown) {
-    setMsg(String(e), true);
+    setMsg(formatErr(e), true);
   } finally {
     busy.value = false;
   }

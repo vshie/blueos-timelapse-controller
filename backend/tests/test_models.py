@@ -26,3 +26,14 @@ def test_recipe_weekday_validation():
 def test_recipe_time_format():
     with pytest.raises(ValidationError):
         Recipe(name="x", days_of_week=[0], times_local=["25:00"])
+
+
+def test_recipe_time_lenient_parsing():
+    """Single-digit hours/minutes are accepted and normalised to HH:MM."""
+    r = Recipe(name="x", days_of_week=[0], times_local=["8:00", " 9:5", "23:59"])
+    assert r.times_local == ["08:00", "09:05", "23:59"]
+
+
+def test_recipe_multiple_times_dedup_sorted():
+    r = Recipe(name="x", days_of_week=[0], times_local=["14:30", "08:00", "08:00"])
+    assert r.times_local == ["08:00", "14:30"]
