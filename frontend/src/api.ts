@@ -31,7 +31,14 @@ export type SchedulerState = {
   current_recipe_name: string | null;
   last_run_at_iso: string | null;
   next_wake_iso: string | null;
+  current_action: string | null;
+  current_action_started_at_iso: string | null;
 };
+
+export type RecipesState = Record<
+  string,
+  { is_running: boolean; current_action: string | null; next_run_iso: string | null }
+>;
 
 export type Settings = {
   default_rtsp_url: string;
@@ -81,6 +88,7 @@ export async function getStatus() {
     scheduler: SchedulerState;
     mavlink: Record<string, unknown>;
     device_time?: DeviceTime;
+    recipes_state?: RecipesState;
     settings_summary: Record<string, unknown>;
   };
 }

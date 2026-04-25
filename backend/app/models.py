@@ -161,3 +161,5 @@ class SchedulerStateResponse(BaseModel):
     current_recipe_name: str | None = None
     last_run_at_iso: str | None = None
     next_wake_iso: str | None = None
+    current_action: Literal["tilt", "light", "snapshot", "recording", "remux"] | None = None
+    current_action_started_at_iso: str | None = None

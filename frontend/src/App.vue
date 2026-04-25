@@ -10,6 +10,66 @@ const settings = ref<Settings | null>(null);
 const recipes = ref<Recipe[]>([]);
 const msg = reactive({ text: "", err: false });
 const busy = ref(false);
+const nowMs = ref(Date.now());
+
+const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function actionLabel(a: string | null): string {
+  switch (a) {
+    case "tilt":
+      return "Setting tilt";
+    case "light":
+      return "Adjusting light";
+    case "snapshot":
+      return "Capturing snapshot";
+    case "recording":
+      return "Recording video";
+    case "remux":
+      return "Finalising video";
+    default:
+      return "";
+  }
+}
+
+function formatRelative(iso: string | null, fromMs: number): string {
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "";
+  const deltaMs = t - fromMs;
+  const past = deltaMs < 0;
+  const sec = Math.floor(Math.abs(deltaMs) / 1000);
+  if (sec < 5) return "now";
+  let out: string;
+  if (sec < 60) {
+    out = `${sec}s`;
+  } else if (sec < 3600) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    out = s ? `${m}m${s}s` : `${m}m`;
+  } else if (sec < 86400) {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    out = m ? `${h}h${m}m` : `${h}h`;
+  } else {
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    out = h ? `${d}d${h}h` : `${d}d`;
+  }
+  return past ? `${out} ago` : `in ${out}`;
+}
+
+// The ISO already encodes the device tz offset, so we slice the date and HH:MM directly
+// from the string and compute the weekday from the date portion via Date.UTC. This keeps
+// the displayed weekday/HH:MM matching the device tz regardless of the browser tz.
+function formatLocalShort(iso: string | null): string {
+  if (!iso) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(iso);
+  if (!m) return "";
+  const [, y, mo, d, hh, mm] = m;
+  const utc = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d)));
+  const wd = WEEKDAY_SHORT[utc.getUTCDay()];
+  return `${wd} ${hh}:${mm}`;
+}
 
 const weekdays = [
   { v: 0, l: "Mon" },
@@ -104,6 +164,9 @@ async function refresh() {
 onMounted(() => {
   void refresh();
   setInterval(() => void refresh(), 5000);
+  setInterval(() => {
+    nowMs.value = Date.now();
+  }, 1000);
 });
 
 async function saveSettingsForm() {
@@ -228,6 +291,58 @@ const deviceTimeLabel = computed(() => {
   return `Device time: ${dt.weekday} ${dt.date} ${dt.hm}${tzShort}${tzName}`;
 });
 
+const isRunning = computed(() => status.value?.scheduler?.state === "running");
+
+const activeStartedIso = computed(() => {
+  const s = status.value?.scheduler;
+  if (!s) return null;
+  return s.current_action_started_at_iso || s.last_run_at_iso || null;
+});
+
+const activeElapsed = computed(() => {
+  const iso = activeStartedIso.value;
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "";
+  const sec = Math.max(0, Math.floor((nowMs.value - t) / 1000));
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}m${s.toString().padStart(2, "0")}s`;
+});
+
+const activeActionLabel = computed(() =>
+  actionLabel(status.value?.scheduler?.current_action ?? null) || "Running",
+);
+
+type NextRunEntry = {
+  recipeId: string;
+  recipeName: string;
+  iso: string;
+  ms: number;
+};
+
+const nextScheduled = computed<NextRunEntry | null>(() => {
+  const rs = status.value?.recipes_state;
+  if (!rs) return null;
+  const byId = new Map(recipes.value.map((r) => [r.id, r]));
+  const candidates: NextRunEntry[] = [];
+  for (const [rid, info] of Object.entries(rs)) {
+    if (!info?.next_run_iso) continue;
+    const r = byId.get(rid);
+    if (!r || !r.enabled) continue;
+    const ms = Date.parse(info.next_run_iso);
+    if (Number.isNaN(ms)) continue;
+    candidates.push({ recipeId: rid, recipeName: r.name, iso: info.next_run_iso, ms });
+  }
+  candidates.sort((a, b) => a.ms - b.ms);
+  return candidates[0] ?? null;
+});
+
+function recipeRunInfo(id: string) {
+  return status.value?.recipes_state?.[id] ?? null;
+}
+
 function detectBrowserTimezone() {
   if (!settings.value) return;
   try {
@@ -256,6 +371,16 @@ function detectBrowserTimezone() {
     <div v-if="msg.text" class="msg" :class="{ err: msg.err, ok: !msg.err }">{{ msg.text }}</div>
 
     <div v-if="tab === 'status'" class="card">
+      <div v-if="isRunning" class="active-banner">
+        <span class="active-badge">● {{ activeActionLabel }}…</span>
+        <span class="active-name">{{ status?.scheduler?.current_recipe_name || "(recipe)" }}</span>
+        <span class="active-elapsed small">{{ activeElapsed ? `elapsed ${activeElapsed}` : "" }}</span>
+      </div>
+      <div v-else-if="nextScheduled" class="next-line small">
+        Next scheduled: <strong>{{ nextScheduled.recipeName }}</strong>
+        — {{ formatLocalShort(nextScheduled.iso) }} ({{ formatRelative(nextScheduled.iso, nowMs) }})
+      </div>
+
       <h2>Scheduler</h2>
       <pre v-if="status" class="small" style="margin: 0; overflow: auto">{{ JSON.stringify(status.scheduler, null, 2) }}</pre>
       <h2>MAVLink</h2>
@@ -351,6 +476,7 @@ function detectBrowserTimezone() {
             <th>Name</th>
             <th>Enabled</th>
             <th>Times</th>
+            <th>Status</th>
             <th></th>
           </tr>
         </thead>
@@ -359,6 +485,19 @@ function detectBrowserTimezone() {
             <td>{{ r.name }}</td>
             <td>{{ r.enabled }}</td>
             <td>{{ r.times_local.join(", ") }}</td>
+            <td>
+              <template v-if="recipeRunInfo(r.id)?.is_running">
+                <span class="badge badge-running">
+                  ● Running{{ recipeRunInfo(r.id)?.current_action ? `: ${actionLabel(recipeRunInfo(r.id)!.current_action)}` : "" }}
+                </span>
+              </template>
+              <template v-else-if="r.enabled && recipeRunInfo(r.id)?.next_run_iso">
+                <span class="badge badge-next">
+                  Next: {{ formatLocalShort(recipeRunInfo(r.id)!.next_run_iso) }}
+                  ({{ formatRelative(recipeRunInfo(r.id)!.next_run_iso, nowMs) }})
+                </span>
+              </template>
+            </td>
             <td><button class="btn secondary" type="button" @click="editRecipe(r)">Edit</button></td>
           </tr>
         </tbody>

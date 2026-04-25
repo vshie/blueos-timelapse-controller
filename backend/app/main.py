@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.config_env import get_settings
 from app.models import AppSettings, Recipe, SchedulerStateResponse
+from app.schedule_calc import next_run_at
 from app.scheduler_service import SchedulerService
 from app.storage import Storage
 from app.timeutil import now_local
@@ -85,11 +86,23 @@ _WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 @app.get("/api/v1/status")
 def api_status():
     st = _scheduler.get_state() if _scheduler is not None else SchedulerStateResponse()
-    settings = get_storage().load_settings()
+    storage = get_storage()
+    settings = storage.load_settings()
     from app import mavlink_control
 
     now = now_local(settings)
     tz_label = now.strftime("%Z") or settings.timezone or now.strftime("%z")
+
+    recipes_state: dict[str, dict[str, object]] = {}
+    for r in storage.list_recipes():
+        is_running = st.state == "running" and st.current_recipe_id == r.id
+        nxt = next_run_at(r, settings, now=now)
+        recipes_state[r.id] = {
+            "is_running": is_running,
+            "current_action": st.current_action if is_running else None,
+            "next_run_iso": nxt.isoformat(timespec="seconds") if nxt is not None else None,
+        }
+
     return {
         "scheduler": st.model_dump(),
         "mavlink": mavlink_control.mavlink_status(settings),
@@ -102,6 +115,7 @@ def api_status():
             "tz": tz_label,
             "tz_name": settings.timezone or "",
         },
+        "recipes_state": recipes_state,
         "settings_summary": {
             "default_rtsp_url_set": bool(settings.default_rtsp_url),
             "mavlink_connection": settings.mavlink_connection,

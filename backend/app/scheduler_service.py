@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime as dt
 import logging
 import threading
 import time
@@ -115,26 +114,44 @@ class SchedulerService:
             message="Executing recipe",
             current_recipe_id=recipe.id,
             current_recipe_name=recipe.name,
-            last_run_at_iso=dt.datetime.now().astimezone().isoformat(),
+            last_run_at_iso=now_local(settings).isoformat(timespec="seconds"),
+            current_action=None,
+            current_action_started_at_iso=None,
         )
         url = (recipe.rtsp_url or "").strip() or settings.default_rtsp_url
         if not url:
-            self._set_state(state="failed", message="No RTSP URL configured", current_recipe_id=recipe.id)
+            self._set_state(
+                state="failed",
+                message="No RTSP URL configured",
+                current_recipe_id=recipe.id,
+                current_action=None,
+                current_action_started_at_iso=None,
+            )
             return
+
+        def _begin(action: str) -> None:
+            self._set_state(
+                current_action=action,
+                current_action_started_at_iso=now_local(settings).isoformat(timespec="seconds"),
+            )
 
         acts = recipe.actions
         try:
             if acts.camera_tilt_pitch_deg is not None:
+                _begin("tilt")
                 mavlink_control.set_camera_tilt_pitch(settings, float(acts.camera_tilt_pitch_deg))
             elif acts.center_camera_tilt:
+                _begin("tilt")
                 mavlink_control.center_camera_tilt(settings)
             if acts.light_brightness_pct is not None:
+                _begin("light")
                 mavlink_control.set_light_pwm(settings, acts.light_brightness_pct)
 
             cap_dir = storage.captures_dir
             base = capture.stamp_basename(recipe.filename_prefix)
 
             if acts.take_snapshot:
+                _begin("snapshot")
                 snap = cap_dir / f"{base}.jpg"
                 capture.capture_snapshot(
                     url,
@@ -147,6 +164,7 @@ class SchedulerService:
                 dur_s = float(acts.record_video_minutes) * 60.0
                 ts_path = cap_dir / f"{base}.ts"
                 mp4_path = cap_dir / f"{base}.mp4"
+                _begin("recording")
                 capture.record_for_duration(
                     url,
                     ts_path,
@@ -154,6 +172,7 @@ class SchedulerService:
                     latency_ms=settings.gstreamer_latency_ms,
                     tcp=settings.use_tcp_rtsp,
                 )
+                _begin("remux")
                 ok, final_path = capture.finalise_recording(ts_path, mp4_path, duration_s=dur_s)
                 if not ok:
                     logger.warning("remux failed, keeping .ts: %s", final_path)
@@ -163,6 +182,8 @@ class SchedulerService:
                 message="Recipe finished",
                 current_recipe_id=recipe.id,
                 current_recipe_name=recipe.name,
+                current_action=None,
+                current_action_started_at_iso=None,
             )
         except Exception as e:
             logger.exception("recipe failed")
@@ -171,4 +192,6 @@ class SchedulerService:
                 message=str(e),
                 current_recipe_id=recipe.id,
                 current_recipe_name=recipe.name,
+                current_action=None,
+                current_action_started_at_iso=None,
             )
