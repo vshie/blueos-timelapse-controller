@@ -3,6 +3,8 @@ import axios from "axios";
 import { computed, onMounted, reactive, ref } from "vue";
 import * as api from "./api";
 import type { Recipe, Settings } from "./api";
+import blueRoboticsLogo from "./assets/blue-robotics-logo.png";
+import seattleAquariumLogo from "./assets/seattle-aquarium-logo.png";
 
 const tab = ref<"status" | "recipes" | "settings" | "manual">("status");
 const status = ref<Awaited<ReturnType<typeof api.getStatus>> | null>(null);
@@ -380,6 +382,14 @@ function detectBrowserTimezone() {
 </script>
 
 <template>
+  <div class="brand-bar">
+    <a class="brand-link brand-link-left" href="https://bluerobotics.com" target="_blank" rel="noopener">
+      <img :src="blueRoboticsLogo" alt="Blue Robotics" />
+    </a>
+    <a class="brand-link brand-link-right" href="https://www.seattleaquarium.org/" target="_blank" rel="noopener">
+      <img :src="seattleAquariumLogo" alt="Seattle Aquarium" />
+    </a>
+  </div>
   <div class="container">
     <h1>Timelapse Controller</h1>
     <p class="small">BlueOS extension — scheduled RTSP capture, MAVLink tilt center, Lumen PWM.</p>
