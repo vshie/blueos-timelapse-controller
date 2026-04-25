@@ -180,6 +180,29 @@ code {
   margin: 0 0 0.75rem;
 }
 
+.disk-low-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  background: #2a1a1a;
+  border: 1px solid #8b3a3a;
+  color: #ffd6d0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  margin: 0 0 0.75rem;
+}
+
+.disk-low-banner .active-badge {
+  background: #8b1f1f;
+  border-color: #b94545;
+  color: #ffe4df;
+}
+
+.disk-low-banner .small {
+  color: #ffd6d0;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

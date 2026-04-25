@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.config_env import get_settings
+from app.disk_util import disk_free_bytes, disk_total_bytes
 from app.models import AppSettings, Recipe, SchedulerStateResponse
 from app.schedule_calc import next_run_at
 from app.scheduler_service import SchedulerService
@@ -96,6 +97,19 @@ def _reject_if_recipe_running() -> None:
         )
 
 
+def _reject_if_this_recipe_running(recipe_id: str) -> None:
+    """409 only when the specifically targeted recipe is the one currently running."""
+    if _scheduler is None:
+        return
+    st = _scheduler.get_state()
+    if st.state == "running" and st.current_recipe_id == recipe_id:
+        name = st.current_recipe_name or "(recipe)"
+        raise HTTPException(
+            409,
+            f'Recipe "{name}" is currently running; cannot delete',
+        )
+
+
 @app.get("/api/v1/status")
 def api_status():
     st = _scheduler.get_state() if _scheduler is not None else SchedulerStateResponse()
@@ -116,6 +130,16 @@ def api_status():
             "next_run_iso": nxt.isoformat(timespec="seconds") if nxt is not None else None,
         }
 
+    free_bytes = disk_free_bytes(storage.captures_dir)
+    total_bytes = disk_total_bytes(storage.captures_dir)
+    threshold_bytes = settings.min_free_space_gb * (1024 ** 3)
+    disk_block = {
+        "free_gb": round(free_bytes / (1024 ** 3), 2),
+        "total_gb": round(total_bytes / (1024 ** 3), 2),
+        "threshold_gb": round(settings.min_free_space_gb, 2),
+        "low": free_bytes < threshold_bytes,
+    }
+
     return {
         "scheduler": st.model_dump(),
         "mavlink": mavlink_control.mavlink_status(settings),
@@ -129,6 +153,7 @@ def api_status():
             "tz_name": settings.timezone or "",
         },
         "recipes_state": recipes_state,
+        "disk": disk_block,
         "settings_summary": {
             "default_rtsp_url_set": bool(settings.default_rtsp_url),
             "mavlink_connection": settings.mavlink_connection,
@@ -174,6 +199,7 @@ def update_recipe(recipe_id: str, body: Recipe):
 
 @app.delete("/api/v1/recipes/{recipe_id}")
 def delete_recipe(recipe_id: str):
+    _reject_if_this_recipe_running(recipe_id)
     if not get_storage().delete_recipe(recipe_id):
         raise HTTPException(404, "recipe not found")
     return {"ok": True}
@@ -316,7 +342,9 @@ def register_service():
 
 static = _static_dir()
 if static.exists():
-    app.mount("/assets", StaticFiles(directory=static / "assets"), name="assets")
+    _assets = static / "assets"
+    if _assets.exists():
+        app.mount("/assets", StaticFiles(directory=_assets), name="assets")
 
     @app.get("/{full_path:path}")
     def spa_fallback(full_path: str):

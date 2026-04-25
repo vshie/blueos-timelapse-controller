@@ -36,6 +36,14 @@ class AppSettings(BaseModel):
             "after the recipe finishes (success or failure). If False, leave the recipe's last values."
         ),
     )
+    min_free_space_gb: float = Field(
+        default=2.0,
+        ge=0.0,
+        description=(
+            "Skip recipe snapshots and recordings when free space at the captures directory drops "
+            "below this threshold (GB). Tilt and light actions still run."
+        ),
+    )
 
     @model_validator(mode="after")
     def pwm_range(self):

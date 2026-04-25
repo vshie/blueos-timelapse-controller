@@ -21,6 +21,16 @@ def test_app_settings_pwm_order():
         AppSettings(light_pwm_min=1900, light_pwm_max=1100)
 
 
+def test_app_settings_min_free_space_default_is_two_gb():
+    s = AppSettings()
+    assert s.min_free_space_gb == 2.0
+
+
+def test_app_settings_min_free_space_negative_rejected():
+    with pytest.raises(ValidationError):
+        AppSettings(min_free_space_gb=-1.0)
+
+
 def test_recipe_weekday_validation():
     with pytest.raises(ValidationError):
         Recipe(name="x", days_of_week=[0, 8], times_local=["12:00"])

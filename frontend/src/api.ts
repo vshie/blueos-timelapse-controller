@@ -52,6 +52,7 @@ export type Settings = {
   use_tcp_rtsp: boolean;
   timezone: string;
   restore_state_after_recipe: boolean;
+  min_free_space_gb: number;
 };
 
 export type RecipeActions = {
@@ -90,6 +91,7 @@ export async function getStatus() {
     mavlink: Record<string, unknown>;
     device_time?: DeviceTime;
     recipes_state?: RecipesState;
+    disk?: { free_gb: number; total_gb: number; threshold_gb: number; low: boolean };
     settings_summary: Record<string, unknown>;
   };
 }

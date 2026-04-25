@@ -297,6 +297,27 @@ const deviceTimeLabel = computed(() => {
 
 const isRunning = computed(() => status.value?.scheduler?.state === "running");
 
+const editorIsRunning = computed(
+  () =>
+    status.value?.scheduler?.state === "running" &&
+    !!editor.value.id &&
+    status.value.scheduler.current_recipe_id === editor.value.id,
+);
+
+const diskLow = computed(() => status.value?.disk?.low === true);
+
+const diskLine = computed(() => {
+  const d = status.value?.disk;
+  if (!d) return "";
+  return `Disk: ${d.free_gb.toFixed(2)} / ${d.total_gb.toFixed(2)} GB free`;
+});
+
+const diskLowBannerText = computed(() => {
+  const d = status.value?.disk;
+  if (!d || !d.low) return "";
+  return `Low disk space: only ${d.free_gb.toFixed(2)} GB free (threshold ${d.threshold_gb.toFixed(2)} GB). New recipe snapshots and recordings will be skipped until space is freed.`;
+});
+
 const activeStartedIso = computed(() => {
   const s = status.value?.scheduler;
   if (!s) return null;
@@ -375,6 +396,10 @@ function detectBrowserTimezone() {
     <div v-if="msg.text" class="msg" :class="{ err: msg.err, ok: !msg.err }">{{ msg.text }}</div>
 
     <div v-if="tab === 'status'" class="card">
+      <div v-if="diskLow" class="disk-low-banner">
+        <span class="active-badge">● Low disk</span>
+        <span class="small">{{ diskLowBannerText }}</span>
+      </div>
       <div v-if="isRunning" class="active-banner">
         <span class="active-badge">● {{ activeActionLabel }}…</span>
         <span class="active-name">{{ status?.scheduler?.current_recipe_name || "(recipe)" }}</span>
@@ -386,6 +411,7 @@ function detectBrowserTimezone() {
       </div>
 
       <h2>Scheduler</h2>
+      <p v-if="diskLine" class="small" style="margin: 0 0 0.35rem">{{ diskLine }}</p>
       <pre v-if="status" class="small" style="margin: 0; overflow: auto">{{ JSON.stringify(status.scheduler, null, 2) }}</pre>
       <h2>MAVLink</h2>
       <pre v-if="status" class="small" style="margin: 0; overflow: auto">{{ JSON.stringify(status.mavlink, null, 2) }}</pre>
@@ -471,6 +497,13 @@ function detectBrowserTimezone() {
           When enabled, the extension reads the current gimbal pitch and light PWM before running a
           recipe and returns them to that state when the recipe finishes (success or failure). Disable
           to leave whatever the recipe last set.
+        </p>
+
+        <label>Min free disk space (GB)</label>
+        <input v-model.number="settings.min_free_space_gb" type="number" min="0" step="0.1" />
+        <p class="small" style="margin: 0.1rem 0 0">
+          Recipes will skip snapshots and recordings when free space at the captures directory drops
+          below this. Default 2 GB. Tilt and light still run.
         </p>
 
         <div class="row" style="margin-top: 0.75rem">
@@ -625,7 +658,15 @@ function detectBrowserTimezone() {
 
       <div class="row" style="margin-top: 0.75rem">
         <button class="btn" type="button" :disabled="busy" @click="saveRecipe">Save recipe</button>
-        <button class="btn secondary" type="button" :disabled="busy || !editor.id" @click="removeRecipe">Delete</button>
+        <button
+          class="btn secondary"
+          type="button"
+          :disabled="busy || !editor.id || editorIsRunning"
+          :title="editorIsRunning ? 'Recipe is currently running — cannot delete' : ''"
+          @click="removeRecipe"
+        >
+          Delete
+        </button>
       </div>
     </div>
 

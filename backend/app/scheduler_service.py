@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from app import capture, mavlink_control
+from app.disk_util import disk_free_bytes
 from app.models import AppSettings, Recipe, SchedulerStateResponse
 from app.storage import Storage
 from app.timeutil import now_local
@@ -170,6 +171,7 @@ class SchedulerService:
                 logger.warning("snapshot_prior failed: %s", e)
 
         run_error: Exception | None = None
+        disk_skip_msg: str | None = None
         try:
             if acts.camera_tilt_pitch_deg is not None:
                 _begin("tilt")
@@ -184,7 +186,17 @@ class SchedulerService:
             cap_dir = storage.captures_dir
             base = capture.stamp_basename(recipe.filename_prefix)
 
-            if acts.take_snapshot:
+            threshold_bytes = int(settings.min_free_space_gb * (1024 ** 3))
+            free_bytes = disk_free_bytes(cap_dir)
+            disk_low = free_bytes < threshold_bytes
+            if disk_low and (acts.take_snapshot or (acts.record_video_minutes and acts.record_video_minutes > 0)):
+                disk_skip_msg = (
+                    "Skipped snapshot/recording: free=%.2f GB < threshold=%.2f GB"
+                    % (free_bytes / 1e9, settings.min_free_space_gb)
+                )
+                logger.warning(disk_skip_msg)
+
+            if acts.take_snapshot and not disk_low:
                 _begin("snapshot")
                 snap = cap_dir / f"{base}.jpg"
                 capture.capture_snapshot(
@@ -194,7 +206,7 @@ class SchedulerService:
                     tcp=settings.use_tcp_rtsp,
                 )
 
-            if acts.record_video_minutes and acts.record_video_minutes > 0:
+            if acts.record_video_minutes and acts.record_video_minutes > 0 and not disk_low:
                 dur_s = float(acts.record_video_minutes) * 60.0
                 ts_path = cap_dir / f"{base}.ts"
                 mp4_path = cap_dir / f"{base}.mp4"
@@ -235,6 +247,8 @@ class SchedulerService:
                 msg = str(run_error)
                 if restore_errors:
                     msg += " (restore issues: " + "; ".join(restore_errors) + ")"
+                if disk_skip_msg:
+                    msg += " — " + disk_skip_msg
                 self._set_state(
                     state="failed",
                     message=msg,
@@ -247,6 +261,8 @@ class SchedulerService:
                 msg = "Recipe finished"
                 if restore_errors:
                     msg += " (restore issues: " + "; ".join(restore_errors) + ")"
+                if disk_skip_msg:
+                    msg += " — " + disk_skip_msg
                 self._set_state(
                     state="complete",
                     message=msg,
