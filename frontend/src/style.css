@@ -2,7 +2,7 @@
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
   line-height: 1.45;
   color: #e8eaed;
-  background: #2699d0;
+  background: #0e1a26;
 }
 
 * {
@@ -12,15 +12,18 @@
 body {
   margin: 0;
   padding: 0 0 2rem;
-  background: #2699d0;
+  background: #0e1a26;
 }
 
 .brand-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem 0.5rem;
+  padding: 0.85rem 1.25rem;
   gap: 1rem;
+  background: #2699d0;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  margin-bottom: 1rem;
 }
 
 .brand-link {
@@ -40,6 +43,10 @@ body {
 @media (max-width: 480px) {
   .brand-link img {
     height: 40px;
+  }
+
+  .brand-bar {
+    padding: 0.6rem 0.85rem;
   }
 }
 
