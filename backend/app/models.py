@@ -53,7 +53,17 @@ class AppSettings(BaseModel):
 
 
 class RecipeActions(BaseModel):
-    center_camera_tilt: bool = False
+    center_camera_tilt: bool = Field(
+        default=False,
+        description="deprecated: use camera_tilt_pitch_deg=0 instead",
+    )
+    camera_tilt_pitch_deg: float | None = Field(
+        default=None,
+        description=(
+            "If set, command gimbal tilt to this pitch in degrees. 0 = center. "
+            "None = leave tilt unchanged. Takes precedence over center_camera_tilt."
+        ),
+    )
     light_brightness_pct: int | None = Field(
         default=None,
         description="If set, command light to this brightness (0-100); if null, do not change light",
@@ -73,12 +83,29 @@ class RecipeActions(BaseModel):
             raise ValueError("light_brightness_pct must be between 0 and 100")
         return v
 
+    @field_validator("camera_tilt_pitch_deg")
+    @classmethod
+    def tilt_pitch_range(cls, v: float | None) -> float | None:
+        if v is None:
+            return None
+        if v < -90.0 or v > 90.0:
+            raise ValueError("camera_tilt_pitch_deg must be between -90 and 90")
+        return v
+
     @field_validator("record_video_minutes")
     @classmethod
     def record_positive_or_none(cls, v: float | None) -> float | None:
         if v is not None and v <= 0:
             return None
         return v
+
+    @model_validator(mode="after")
+    def migrate_legacy_center_tilt(self):
+        if self.center_camera_tilt:
+            if self.camera_tilt_pitch_deg is None:
+                self.camera_tilt_pitch_deg = 0.0
+            self.center_camera_tilt = False
+        return self
 
 
 class Recipe(BaseModel):

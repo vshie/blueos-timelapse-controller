@@ -30,7 +30,8 @@ const editor = ref<Recipe>({
   rtsp_url: null,
   filename_prefix: "",
   actions: {
-    center_camera_tilt: true,
+    camera_tilt_pitch_deg: 0,
+    center_camera_tilt: false,
     light_brightness_pct: null,
     take_snapshot: true,
     record_video_minutes: null,
@@ -141,12 +142,27 @@ function newRecipe() {
     rtsp_url: null,
     filename_prefix: "",
     actions: {
-      center_camera_tilt: true,
+      camera_tilt_pitch_deg: 0,
+      center_camera_tilt: false,
       light_brightness_pct: 50,
       take_snapshot: true,
       record_video_minutes: 1,
     },
   };
+}
+
+const tiltEnabled = computed(() => editor.value.actions.camera_tilt_pitch_deg !== null);
+
+function onTiltToggle(enabled: boolean) {
+  if (enabled) {
+    if (editor.value.actions.camera_tilt_pitch_deg === null) {
+      editor.value.actions.camera_tilt_pitch_deg = 0;
+    }
+    editor.value.actions.center_camera_tilt = false;
+  } else {
+    editor.value.actions.camera_tilt_pitch_deg = null;
+    editor.value.actions.center_camera_tilt = false;
+  }
 }
 
 function editRecipe(r: Recipe) {
@@ -385,9 +401,44 @@ function detectBrowserTimezone() {
 
       <h2>Actions</h2>
       <label class="row">
-        <input v-model="editor.actions.center_camera_tilt" type="checkbox" style="width: auto" />
-        Center camera tilt (MAVLink)
+        <input
+          :checked="tiltEnabled"
+          type="checkbox"
+          style="width: auto"
+          @change="onTiltToggle(($event.target as HTMLInputElement).checked)"
+        />
+        Set camera tilt
       </label>
+      <div v-if="tiltEnabled" class="row" style="align-items: center">
+        <input
+          v-model.number="editor.actions.camera_tilt_pitch_deg"
+          type="number"
+          step="1"
+          min="-90"
+          max="90"
+          style="max-width: 6rem"
+        />
+        <span class="small">°</span>
+        <button
+          class="btn secondary"
+          type="button"
+          style="padding: 0.25rem 0.5rem; font-size: 0.85rem"
+          @click="editor.actions.camera_tilt_pitch_deg = 0"
+        >
+          Center (0°)
+        </button>
+        <button
+          class="btn secondary"
+          type="button"
+          style="padding: 0.25rem 0.5rem; font-size: 0.85rem"
+          @click="editor.actions.camera_tilt_pitch_deg = -45"
+        >
+          Down 45°
+        </button>
+      </div>
+      <p v-if="tiltEnabled" class="small" style="margin: 0.1rem 0 0.25rem">
+        0° = center. Allowed range −90°…+90° (Settings caps actual sent commands to your tilt min/max).
+      </p>
       <label class="row">
         <input v-model="editor.actions.take_snapshot" type="checkbox" style="width: auto" />
         Take snapshot (ffmpeg)

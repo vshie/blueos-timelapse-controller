@@ -48,6 +48,7 @@ export type Settings = {
 
 export type RecipeActions = {
   center_camera_tilt: boolean;
+  camera_tilt_pitch_deg: number | null;
   light_brightness_pct: number | null;
   take_snapshot: boolean;
   record_video_minutes: number | null;

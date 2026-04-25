@@ -124,7 +124,9 @@ class SchedulerService:
 
         acts = recipe.actions
         try:
-            if acts.center_camera_tilt:
+            if acts.camera_tilt_pitch_deg is not None:
+                mavlink_control.set_camera_tilt_pitch(settings, float(acts.camera_tilt_pitch_deg))
+            elif acts.center_camera_tilt:
                 mavlink_control.center_camera_tilt(settings)
             if acts.light_brightness_pct is not None:
                 mavlink_control.set_light_pwm(settings, acts.light_brightness_pct)

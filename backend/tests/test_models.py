@@ -5,7 +5,7 @@ import datetime as dt
 import pytest
 from pydantic import ValidationError
 
-from app.models import AppSettings, Recipe
+from app.models import AppSettings, Recipe, RecipeActions
 from app.mavlink_control import brightness_to_pwm
 from app.timeutil import now_local
 
@@ -70,3 +70,31 @@ def test_now_local_empty_timezone_returns_aware_datetime():
     s = AppSettings()
     t = now_local(s)
     assert t.tzinfo is not None
+
+
+def test_recipe_actions_tilt_zero_accepted():
+    a = RecipeActions(camera_tilt_pitch_deg=0)
+    assert a.camera_tilt_pitch_deg == 0.0
+    assert a.center_camera_tilt is False
+
+
+def test_recipe_actions_tilt_negative_accepted():
+    a = RecipeActions(camera_tilt_pitch_deg=-45.0)
+    assert a.camera_tilt_pitch_deg == -45.0
+
+
+def test_recipe_actions_tilt_out_of_range_rejected():
+    with pytest.raises(ValidationError):
+        RecipeActions(camera_tilt_pitch_deg=120)
+
+
+def test_recipe_actions_legacy_center_migrates_to_zero():
+    a = RecipeActions(camera_tilt_pitch_deg=None, center_camera_tilt=True)
+    assert a.camera_tilt_pitch_deg == 0.0
+    assert a.center_camera_tilt is False
+
+
+def test_recipe_actions_explicit_pitch_overrides_legacy_bool():
+    a = RecipeActions(camera_tilt_pitch_deg=10, center_camera_tilt=True)
+    assert a.camera_tilt_pitch_deg == 10.0
+    assert a.center_camera_tilt is False
