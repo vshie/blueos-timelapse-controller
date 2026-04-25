@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from typing import TYPE_CHECKING
@@ -315,6 +316,12 @@ def set_light_pwm(settings: AppSettings, brightness_pct: int) -> None:
     _do_set_servo_us(m, settings.light_servo_channel, pwm)
 
 
+def set_light_pwm_us(settings: AppSettings, pwm_us: int) -> None:
+    """Set light servo to an exact PWM µs value (used to restore prior snapshotted PWM)."""
+    m = get_master(settings.mavlink_connection)
+    _do_set_servo_us(m, settings.light_servo_channel, int(pwm_us))
+
+
 def set_light_manual_brightness(settings: AppSettings, brightness_pct: int) -> None:
     """Manual UI: 0% -> 1100 us off, 100% -> 1900 us full brightness."""
     m = get_master(settings.mavlink_connection)
@@ -332,6 +339,127 @@ def _do_set_servo_us(master: mavutil.mavlink_connection, servo_instance: int, pw
         cmd,
         (float(servo_instance), float(pwm_us), 0.0, 0.0, 0.0, 0.0, 0.0),
     )
+
+
+def _request_message_interval_locked(
+    master: mavutil.mavlink_connection,
+    message_id: int,
+    interval_us: int,
+) -> None:
+    """Best-effort SET_MESSAGE_INTERVAL; ignore ACK to keep the receive window for the caller."""
+    try:
+        _command_long_send_locked(
+            master,
+            mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
+            float(message_id),
+            float(interval_us),
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        )
+    except Exception as e:
+        logger.debug("SET_MESSAGE_INTERVAL request failed for id=%s: %s", message_id, e)
+
+
+def read_servo_pwm(
+    master: mavutil.mavlink_connection,
+    servo_channel: int,
+    *,
+    timeout_s: float = 1.5,
+) -> int | None:
+    """Return current PWM µs for SERVO_OUTPUT_RAW channel `servo_channel` (1-16).
+
+    ArduSub streams SERVO_OUTPUT_RAW at ~2 Hz by default, so a short receive window
+    is normally enough. Returns None on timeout.
+    """
+    if servo_channel < 1 or servo_channel > 16:
+        logger.warning("read_servo_pwm: channel %s out of 1..16 range", servo_channel)
+        return None
+    field = f"servo{servo_channel}_raw"
+    deadline = time.monotonic() + timeout_s
+    requested_stream = False
+    try:
+        with _lock:
+            while time.monotonic() < deadline:
+                msg = master.recv_match(type="SERVO_OUTPUT_RAW", blocking=True, timeout=0.5)
+                if msg is None:
+                    if not requested_stream:
+                        _request_message_interval_locked(
+                            master,
+                            mavutil.mavlink.MAVLINK_MSG_ID_SERVO_OUTPUT_RAW,
+                            200000,
+                        )
+                        requested_stream = True
+                    continue
+                pwm = getattr(msg, field, None)
+                if pwm is None:
+                    continue
+                try:
+                    pwm_int = int(pwm)
+                except (TypeError, ValueError):
+                    continue
+                if pwm_int <= 0:
+                    continue
+                return pwm_int
+    except Exception as e:
+        logger.warning("read_servo_pwm error: %s", e)
+        return None
+    logger.warning("read_servo_pwm timeout on servo%s_raw after %.2fs", servo_channel, timeout_s)
+    return None
+
+
+def read_mount_pitch_deg(
+    master: mavutil.mavlink_connection,
+    *,
+    timeout_s: float = 1.5,
+) -> float | None:
+    """Return current gimbal pitch in degrees, snapshotted from MAVLink.
+
+    Tries MOUNT_STATUS (pointing_a is centi-degrees), falls back to
+    GIMBAL_DEVICE_ATTITUDE_STATUS (quaternion -> euler pitch). Returns None on timeout.
+    """
+    deadline = time.monotonic() + timeout_s
+    requested_stream = False
+    types = ["MOUNT_STATUS", "GIMBAL_DEVICE_ATTITUDE_STATUS"]
+    try:
+        with _lock:
+            while time.monotonic() < deadline:
+                msg = master.recv_match(type=types, blocking=True, timeout=0.5)
+                if msg is None:
+                    if not requested_stream:
+                        ms_id = getattr(mavutil.mavlink, "MAVLINK_MSG_ID_MOUNT_STATUS", None)
+                        gd_id = getattr(
+                            mavutil.mavlink,
+                            "MAVLINK_MSG_ID_GIMBAL_DEVICE_ATTITUDE_STATUS",
+                            None,
+                        )
+                        if ms_id is not None:
+                            _request_message_interval_locked(master, ms_id, 200000)
+                        if gd_id is not None:
+                            _request_message_interval_locked(master, gd_id, 200000)
+                        requested_stream = True
+                    continue
+                t = msg.get_type()
+                if t == "MOUNT_STATUS":
+                    pa = getattr(msg, "pointing_a", None)
+                    if pa is None:
+                        continue
+                    return float(pa) / 100.0
+                if t == "GIMBAL_DEVICE_ATTITUDE_STATUS":
+                    q = getattr(msg, "q", None)
+                    if not q or len(q) < 4:
+                        continue
+                    w, x, y, z = float(q[0]), float(q[1]), float(q[2]), float(q[3])
+                    sinp = 2.0 * (w * y - z * x)
+                    sinp = max(-1.0, min(1.0, sinp))
+                    return math.degrees(math.asin(sinp))
+    except Exception as e:
+        logger.warning("read_mount_pitch_deg error: %s", e)
+        return None
+    logger.warning("read_mount_pitch_deg timeout after %.2fs", timeout_s)
+    return None
 
 
 def mavlink_status(settings: AppSettings) -> dict:

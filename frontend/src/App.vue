@@ -16,6 +16,8 @@ const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function actionLabel(a: string | null): string {
   switch (a) {
+    case "snapshot_prior":
+      return "Snapshotting current state";
     case "tilt":
       return "Setting tilt";
     case "light":
@@ -26,6 +28,8 @@ function actionLabel(a: string | null): string {
       return "Recording video";
     case "remux":
       return "Finalising video";
+    case "restore":
+      return "Restoring previous state";
     default:
       return "";
   }
@@ -457,6 +461,16 @@ function detectBrowserTimezone() {
         <p class="small" style="margin: 0.25rem 0 0">
           Empty = use the container's system time (which on BlueOS reflects the host clock if
           <code>/etc/localtime</code> is bind-mounted).
+        </p>
+
+        <label class="row" style="align-items: center; margin-top: 0.75rem">
+          <input v-model="settings.restore_state_after_recipe" type="checkbox" style="width: auto" />
+          Restore prior camera tilt and light after each recipe
+        </label>
+        <p class="small" style="margin: 0.1rem 0 0">
+          When enabled, the extension reads the current gimbal pitch and light PWM before running a
+          recipe and returns them to that state when the recipe finishes (success or failure). Disable
+          to leave whatever the recipe last set.
         </p>
 
         <div class="row" style="margin-top: 0.75rem">

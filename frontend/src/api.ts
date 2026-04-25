@@ -51,6 +51,7 @@ export type Settings = {
   gstreamer_latency_ms: number;
   use_tcp_rtsp: boolean;
   timezone: string;
+  restore_state_after_recipe: boolean;
 };
 
 export type RecipeActions = {

@@ -136,6 +136,40 @@ class SchedulerService:
             )
 
         acts = recipe.actions
+        wants_tilt = acts.camera_tilt_pitch_deg is not None or acts.center_camera_tilt
+        wants_light = acts.light_brightness_pct is not None
+
+        prior_tilt_deg: float | None = None
+        prior_light_pwm_us: int | None = None
+        if settings.restore_state_after_recipe and (wants_tilt or wants_light):
+            _begin("snapshot_prior")
+            try:
+                master = mavlink_control.get_master(settings.mavlink_connection)
+                if wants_tilt:
+                    prior_tilt_deg = mavlink_control.read_mount_pitch_deg(master)
+                    if prior_tilt_deg is None:
+                        logger.warning("snapshot_prior: gimbal pitch unavailable; will skip tilt restore")
+                    else:
+                        logger.info("snapshot_prior tilt_deg=%.3f", prior_tilt_deg)
+                if wants_light:
+                    prior_light_pwm_us = mavlink_control.read_servo_pwm(
+                        master, settings.light_servo_channel
+                    )
+                    if prior_light_pwm_us is None:
+                        logger.warning(
+                            "snapshot_prior: SERVO_OUTPUT_RAW servo%d unavailable; will skip light restore",
+                            settings.light_servo_channel,
+                        )
+                    else:
+                        logger.info(
+                            "snapshot_prior light pwm_us=%d (servo %d)",
+                            prior_light_pwm_us,
+                            settings.light_servo_channel,
+                        )
+            except Exception as e:
+                logger.warning("snapshot_prior failed: %s", e)
+
+        run_error: Exception | None = None
         try:
             if acts.camera_tilt_pitch_deg is not None:
                 _begin("tilt")
@@ -176,22 +210,48 @@ class SchedulerService:
                 ok, final_path = capture.finalise_recording(ts_path, mp4_path, duration_s=dur_s)
                 if not ok:
                     logger.warning("remux failed, keeping .ts: %s", final_path)
-
-            self._set_state(
-                state="complete",
-                message="Recipe finished",
-                current_recipe_id=recipe.id,
-                current_recipe_name=recipe.name,
-                current_action=None,
-                current_action_started_at_iso=None,
-            )
         except Exception as e:
+            run_error = e
             logger.exception("recipe failed")
-            self._set_state(
-                state="failed",
-                message=str(e),
-                current_recipe_id=recipe.id,
-                current_recipe_name=recipe.name,
-                current_action=None,
-                current_action_started_at_iso=None,
-            )
+        finally:
+            restore_errors: list[str] = []
+            if prior_tilt_deg is not None or prior_light_pwm_us is not None:
+                _begin("restore")
+                logger.info("restoring prior state")
+                if prior_tilt_deg is not None:
+                    try:
+                        mavlink_control.set_camera_tilt_pitch(settings, float(prior_tilt_deg))
+                    except Exception as e:
+                        logger.error("restore tilt failed: %s", e)
+                        restore_errors.append(f"tilt restore: {e}")
+                if prior_light_pwm_us is not None:
+                    try:
+                        mavlink_control.set_light_pwm_us(settings, int(prior_light_pwm_us))
+                    except Exception as e:
+                        logger.error("restore light failed: %s", e)
+                        restore_errors.append(f"light restore: {e}")
+
+            if run_error is not None:
+                msg = str(run_error)
+                if restore_errors:
+                    msg += " (restore issues: " + "; ".join(restore_errors) + ")"
+                self._set_state(
+                    state="failed",
+                    message=msg,
+                    current_recipe_id=recipe.id,
+                    current_recipe_name=recipe.name,
+                    current_action=None,
+                    current_action_started_at_iso=None,
+                )
+            else:
+                msg = "Recipe finished"
+                if restore_errors:
+                    msg += " (restore issues: " + "; ".join(restore_errors) + ")"
+                self._set_state(
+                    state="complete",
+                    message=msg,
+                    current_recipe_id=recipe.id,
+                    current_recipe_name=recipe.name,
+                    current_action=None,
+                    current_action_started_at_iso=None,
+                )

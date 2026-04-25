@@ -29,6 +29,13 @@ class AppSettings(BaseModel):
         default="",
         description="IANA timezone (e.g. 'Pacific/Honolulu'). Empty = use container/host local time.",
     )
+    restore_state_after_recipe: bool = Field(
+        default=True,
+        description=(
+            "If True, snapshot prior tilt/light state before a recipe modifies them and restore "
+            "after the recipe finishes (success or failure). If False, leave the recipe's last values."
+        ),
+    )
 
     @model_validator(mode="after")
     def pwm_range(self):
@@ -161,5 +168,13 @@ class SchedulerStateResponse(BaseModel):
     current_recipe_name: str | None = None
     last_run_at_iso: str | None = None
     next_wake_iso: str | None = None
-    current_action: Literal["tilt", "light", "snapshot", "recording", "remux"] | None = None
+    current_action: Literal[
+        "snapshot_prior",
+        "tilt",
+        "light",
+        "snapshot",
+        "recording",
+        "remux",
+        "restore",
+    ] | None = None
     current_action_started_at_iso: str | None = None
