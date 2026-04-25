@@ -83,6 +83,19 @@ class ManualRecordBody(BaseModel):
 _WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
+def _reject_if_recipe_running() -> None:
+    """409 if a scheduled recipe is currently executing; manual control would race with restore."""
+    if _scheduler is None:
+        return
+    st = _scheduler.get_state()
+    if st.state == "running":
+        name = st.current_recipe_name or "(recipe)"
+        raise HTTPException(
+            409,
+            f'Recipe "{name}" is currently running ({st.current_action or "in progress"}); manual control disabled',
+        )
+
+
 @app.get("/api/v1/status")
 def api_status():
     st = _scheduler.get_state() if _scheduler is not None else SchedulerStateResponse()
@@ -179,6 +192,7 @@ def probe_rtsp(body: RtspProbeBody):
 
 @app.post("/api/v1/manual/tilt-center")
 def manual_tilt_center():
+    _reject_if_recipe_running()
     settings = get_storage().load_settings()
     from app import mavlink_control
 
@@ -191,6 +205,7 @@ def manual_tilt_center():
 
 @app.post("/api/v1/manual/tilt")
 def manual_tilt(body: ManualTiltPitchBody):
+    _reject_if_recipe_running()
     settings = get_storage().load_settings()
     from app import mavlink_control
 
@@ -205,6 +220,7 @@ def manual_tilt(body: ManualTiltPitchBody):
 
 @app.post("/api/v1/manual/light")
 def manual_light(body: ManualLightBody):
+    _reject_if_recipe_running()
     settings = get_storage().load_settings()
     from app import mavlink_control
 
@@ -222,6 +238,7 @@ def manual_light(body: ManualLightBody):
 
 @app.post("/api/v1/manual/snapshot")
 def manual_snapshot():
+    _reject_if_recipe_running()
     settings = get_storage().load_settings()
     if not settings.default_rtsp_url:
         raise HTTPException(400, "Set default_rtsp_url in settings first")
@@ -243,6 +260,7 @@ def manual_snapshot():
 
 @app.post("/api/v1/manual/record")
 def manual_record(body: ManualRecordBody):
+    _reject_if_recipe_running()
     settings = get_storage().load_settings()
     if not settings.default_rtsp_url:
         raise HTTPException(400, "Set default_rtsp_url in settings first")

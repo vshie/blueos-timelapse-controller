@@ -155,6 +155,31 @@ code {
   font-size: 0.85em;
 }
 
+.manual-fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.manual-fieldset[disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.manual-locked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  background: #2a1a1a;
+  border: 1px solid #5e2c2c;
+  color: #ffd6d0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  margin: 0 0 0.75rem;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

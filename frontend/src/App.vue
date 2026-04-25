@@ -630,11 +630,18 @@ function detectBrowserTimezone() {
     </div>
 
     <div v-if="tab === 'manual'" class="card">
+      <div v-if="isRunning" class="manual-locked">
+        <span class="active-badge">● Locked</span>
+        <span class="active-name">{{ status?.scheduler?.current_recipe_name || "(recipe)" }}</span>
+        <span class="small">{{ activeActionLabel }}{{ activeElapsed ? ` · ${activeElapsed}` : "" }} — manual controls
+          disabled until the recipe finishes.</span>
+      </div>
       <p class="small">
         MAVLink uses Settings → connection string and light servo channel. Tilt uses
         <code>MAV_CMD_DO_GIMBAL_MANAGER_TILTPAN</code> (deg, 0 = center; range from Settings, default −70…+70). Light manual
         uses <code>MAV_CMD_DO_SET_SERVO</code>: 0% = 1100 µs (off), 100% = 1900 µs (full).
       </p>
+      <fieldset :disabled="isRunning" class="manual-fieldset">
       <h2>Tilt</h2>
       <div class="row">
         <button class="btn" type="button" :disabled="busy" @click="runManual(() => api.manualTiltCenter(), 'tilt-center')">
@@ -678,6 +685,7 @@ function detectBrowserTimezone() {
           Record (seconds)
         </button>
       </div>
+      </fieldset>
     </div>
   </div>
 </template>
