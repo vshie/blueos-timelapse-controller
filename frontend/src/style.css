@@ -30,18 +30,6 @@ body {
   display: inline-flex;
   align-items: center;
   text-decoration: none;
-  border-radius: 8px;
-  padding: 6px 12px;
-}
-
-/* Each pill matches the bundled logo's source background so the JPEG-flattened
-   regions blend in instead of clashing with the brand-blue strip. */
-.brand-link-left {
-  background: #000;
-}
-
-.brand-link-right {
-  background: #fff;
 }
 
 .brand-link img {
@@ -59,10 +47,6 @@ body {
 
   .brand-bar {
     padding: 0.6rem 0.85rem;
-  }
-
-  .brand-link {
-    padding: 4px 8px;
   }
 }
 
