@@ -10,6 +10,9 @@ on:
   # NOTE: caches may be removed if not run weekly
   # -> may be worth scheduling for every 6 days
 
+permissions:
+  contents: write
+
 jobs:
   deploy-docker-image:
     runs-on: ubuntu-latest
