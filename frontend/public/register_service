@@ -3,7 +3,7 @@
   "description": "Scheduled RTSP timelapse/recording with MAVLink camera tilt and Lumen light control",
   "icon": "mdi-camera-timer",
   "company": "vshie",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "webpage": "https://github.com/vshie/blueos-timelapse-controller",
   "api": "",
   "works_in_relative_paths": true

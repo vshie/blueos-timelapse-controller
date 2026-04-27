@@ -1,6 +1,6 @@
 [project]
 name = "timelapse-controller-backend"
-version = "0.1.0"
+version = "1.0.0"
 description = "BlueOS Timelapse Controller extension backend"
 requires-python = ">=3.11"
 dependencies = [
